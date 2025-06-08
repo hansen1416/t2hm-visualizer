@@ -142,9 +142,10 @@ class AnimPlayer:
         select_button.set_on_clicked(self._on_browse)
         self._widget_layout.add_child(select_button)
 
-        play_button = gui.Button("Play Animation")
-        play_button.set_on_clicked(self._on_run_button_click)
-        self._widget_layout.add_child(play_button)
+        self.play_button = gui.Button("Pause")
+        self.play_button.enabled = False
+        self.play_button.set_on_clicked(self._on_run_button_click)
+        self._widget_layout.add_child(self.play_button)
 
         self.window.add_child(self._widget_layout)
 
@@ -168,42 +169,54 @@ class AnimPlayer:
                 folder_path
             )
 
-        except:
-
-            pass
+        except Exception as e:
+            msg = gui.Dialog("Error")
+            msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
+            msg_layout.add_child(gui.Label(f"Invalid folder selected."))
+            ok_button = gui.Button("OK")
+            ok_button.set_on_clicked(lambda: self.window.close_dialog())
+            msg_layout.add_child(ok_button)
+            msg.add_child(msg_layout)
+            self.window.show_dialog(msg)
+            return
 
         self._play_animation = True
+        self.play_button.enabled = True  # disables
 
     def _on_run_button_click(self):
 
-        pass
+        self._play_animation = not self._play_animation
+        if self._play_animation:
+            self.play_button.text = "Pause"
+        else:
+            self.play_button.text = "Play"
 
     def animate_mesh(self):
 
         while True:
 
-            if self._play_animation:
+            while self._play_animation and self.frame_idx < self.total_frame_count:
 
-                while self.frame_idx < self.total_frame_count:
+                self.body_mesh.vertices = o3d.utility.Vector3dVector(
+                    self.verts_glob[self.frame_idx]
+                )
 
-                    self.body_mesh.vertices = o3d.utility.Vector3dVector(
-                        self.verts_glob[self.frame_idx]
+                def update_scene():
+                    self._scene.scene.remove_geometry("__body_model__")
+                    self._scene.scene.add_geometry(
+                        "__body_model__", self.body_mesh, self.material
                     )
 
-                    def update_scene():
-                        self._scene.scene.remove_geometry("__body_model__")
-                        self._scene.scene.add_geometry(
-                            "__body_model__", self.body_mesh, self.material
-                        )
+                gui.Application.instance.post_to_main_thread(self.window, update_scene)
+                self.frame_idx += 1
+                time.sleep(self.step)  # ~30 FPS
 
-                    gui.Application.instance.post_to_main_thread(
-                        self.window, update_scene
-                    )
-                    self.frame_idx += 1
-                    time.sleep(self.step)  # ~30 FPS
+                # last frame, reset everything
+                if self.frame_idx == self.total_frame_count:
 
-                self._play_animation = False
-                self.frame_idx = 0
+                    self.frame_idx = 0
+                    self._play_animation = False
+                    self.play_button.enabled = False
 
     def run(self):
         gui.Application.instance.run()
