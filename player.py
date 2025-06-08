@@ -124,15 +124,15 @@ class AnimPlayer:
     def _add_ui(self):
         em = self.window.theme.font_size
 
-        self._settings_panel = gui.Vert(
+        self._widget_layout = gui.Vert(
             0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
         )
 
         button = gui.Button("Run Function")
         button.set_on_clicked(self._on_run_button_click)
-        self._settings_panel.add_child(button)
+        self._widget_layout.add_child(button)
 
-        self.window.add_child(self._settings_panel)
+        self.window.add_child(self._widget_layout)
 
         # panel.frame = gui.Rect(10, 10, 1, 50)
 
@@ -143,11 +143,11 @@ class AnimPlayer:
         width = 17 * layout_context.theme.font_size
         height = min(
             r.height,
-            self._settings_panel.calc_preferred_size(
+            self._widget_layout.calc_preferred_size(
                 layout_context, gui.Widget.Constraints()
             ).height,
         )
-        self._settings_panel.frame = gui.Rect(r.get_right() - width, r.y, width, height)
+        self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
 
     def _on_run_button_click(self):
 
@@ -239,21 +239,6 @@ class AnimPlayer:
             self.total_frame_count = total_frame_count
 
             self.verts_glob = verts_glob
-
-            # while frame_idx < total_frame_count:
-
-            #     self.body_mesh.vertices = o3d.utility.Vector3dVector(
-            #         verts_glob[frame_idx]
-            #     )
-            #     self.body_mesh.compute_vertex_normals()
-
-            #     # rendering.Scene.update_geometry(
-            #     #     self._scene.scene.scene, "__body_model__", self.body_mesh
-            #     # )
-
-            #     frame_idx += 1
-
-            #     time.sleep(step)
 
             break
 
