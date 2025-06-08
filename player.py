@@ -2,17 +2,12 @@ import os
 import time
 import threading
 
-import cv2
-import numpy as np
 import open3d as o3d
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 from smplx import SMPL, SMPLX, MANO, FLAME
-import torch
 
-from utils.utils import (
-    get_checkerboard_plane,
-)
+from utils.utils import get_checkerboard_plane, gvhmr_result_loader
 
 
 class AnimPlayer:
@@ -49,6 +44,8 @@ class AnimPlayer:
         self.total_frame_count = 0
 
         self.verts_glob = None
+
+        self._play_animation = False
 
         # thread animation testing
         threading.Thread(target=self.animate_mesh, daemon=True).start()
@@ -165,107 +162,27 @@ class AnimPlayer:
     def _on_browse_done(self, folder_path):
         self.window.close_dialog()
 
-        print(folder_path)
-        print(111111111111)
+        try:
+
+            self.total_frame_count, self.step, self.verts_glob, _ = gvhmr_result_loader(
+                folder_path
+            )
+
+        except:
+
+            pass
+
+        self._play_animation = True
 
     def _on_run_button_click(self):
 
-        results_folder = os.path.join(
-            os.path.expanduser("~"), "repos", "t2hm-dataset", "outputs", "demo"
-        )
-
-        # iterate over results folder
-        for video_name in os.listdir(results_folder):
-
-            joints_glob = torch.load(
-                os.path.join(
-                    results_folder,
-                    video_name,
-                    "joints_glob.pt",
-                )
-            )
-
-            verts_glob = torch.load(
-                os.path.join(
-                    results_folder,
-                    video_name,
-                    "verts_glob.pt",
-                )
-            )
-
-            joints_glob = joints_glob.cpu().numpy()
-            verts_glob = verts_glob.cpu().numpy()
-
-            # data: dict = torch.load(hmr_result)
-            # print(data.keys())
-            # dict_keys(['smpl_params_global', 'smpl_params_incam', 'K_fullimg', 'net_outputs'])
-
-            # print(data["smpl_params_global"].keys())
-            # dict_keys(['body_pose', 'betas', 'global_orient', 'transl'])
-
-            # for k, v in data["smpl_params_global"].items():
-            # print(f"{k}: {v.shape}")
-            # body_pose: torch.Size([336, 63])
-            # betas: torch.Size([336, 10])
-            # global_orient: torch.Size([336, 3])
-            # transl: torch.Size([336, 3])
-
-            # print(data["smpl_params_incam"].keys())
-            # dict_keys(['body_pose', 'betas', 'global_orient', 'transl'])
-
-            # for k, v in data["smpl_params_incam"].items():
-            #     print(f"{k}: {v.shape}")
-            # body_pose: torch.Size([336, 63])
-            # betas: torch.Size([336, 10])
-            # global_orient: torch.Size([336, 3])
-            # transl: torch.Size([336, 3])
-
-            # print(data["K_fullimg"].shape)
-            # torch.Size([336, 3, 3])
-
-            # print(data["net_outputs"].keys())
-            # dict_keys(['model_output', 'decode_dict', 'pred_smpl_params_incam', 'pred_smpl_params_global', 'static_conf_logits'])
-            # this the full output of the network, including both 'smpl_params_global' and 'smpl_params_incam'
-            # for more information, refer to hmr4d/model/gvhmr/gvhmr_pl_demo.py
-
-            video_path = os.path.join(
-                os.path.expanduser("~"),
-                "Downloads",
-                "videos",
-                f"{video_name}.mp4",
-            )
-
-            # check if video file exists
-            if not os.path.exists(video_path):
-                print(f"Video file does not exist: {video_path}")
-                continue
-
-            cap = cv2.VideoCapture(video_path)
-
-            if not cap.isOpened():
-                raise ValueError(f"Cannot open video file: {video_path}")
-
-            total_frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-            fps = cap.get(cv2.CAP_PROP_FPS)
-
-            cap.release()
-
-            self.step = 1 / fps
-
-            self.frame_idx = 0
-
-            self.total_frame_count = total_frame_count
-
-            self.verts_glob = verts_glob
-
-            break
+        pass
 
     def animate_mesh(self):
 
         while True:
 
-            if self.verts_glob is not None:
+            if self._play_animation:
 
                 while self.frame_idx < self.total_frame_count:
 
@@ -285,11 +202,11 @@ class AnimPlayer:
                     self.frame_idx += 1
                     time.sleep(self.step)  # ~30 FPS
 
+                self._play_animation = False
+                self.frame_idx = 0
+
     def run(self):
         gui.Application.instance.run()
-
-    # def start_animation(self):
-    #     self.window.set_on_tick_event(lambda: print(time.time()))
 
 
 if __name__ == "__main__":
