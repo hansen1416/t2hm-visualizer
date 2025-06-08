@@ -189,6 +189,7 @@ class AnimPlayer:
             self.window.show_dialog(msg)
             return
 
+        self.frame_idx = 0
         self.play_animation = True
         self.play_button.enabled = True  # disables
 
