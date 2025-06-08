@@ -50,6 +50,15 @@ class AnimPlayer:
         # thread animation testing
         threading.Thread(target=self.animate_mesh, daemon=True).start()
 
+    @property
+    def play_animation(self):
+        return self._play_animation
+
+    @play_animation.setter
+    def play_animation(self, value):
+        self._play_animation = value
+        self.play_button.text = "Pause" if value else "Play"
+
     def _setup_lighting(self):
 
         # self._scene.scene.set_background([0.96, 0.94, 0.91, 1])
@@ -180,22 +189,18 @@ class AnimPlayer:
             self.window.show_dialog(msg)
             return
 
-        self._play_animation = True
+        self.play_animation = True
         self.play_button.enabled = True  # disables
 
     def _on_run_button_click(self):
 
-        self._play_animation = not self._play_animation
-        if self._play_animation:
-            self.play_button.text = "Pause"
-        else:
-            self.play_button.text = "Play"
+        self.play_animation = not self.play_animation
 
     def animate_mesh(self):
 
         while True:
 
-            while self._play_animation and self.frame_idx < self.total_frame_count:
+            while self.play_animation and self.frame_idx < self.total_frame_count:
 
                 self.body_mesh.vertices = o3d.utility.Vector3dVector(
                     self.verts_glob[self.frame_idx]
@@ -215,8 +220,7 @@ class AnimPlayer:
                 if self.frame_idx == self.total_frame_count:
 
                     self.frame_idx = 0
-                    self._play_animation = False
-                    self.play_button.enabled = False
+                    self.play_animation = False
 
     def run(self):
         gui.Application.instance.run()
