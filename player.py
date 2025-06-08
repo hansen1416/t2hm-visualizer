@@ -164,6 +164,9 @@ class AnimPlayer:
         )
         dlg.set_on_cancel(self._on_browse_cancel)
         dlg.set_on_done(self._on_browse_done)
+
+        dlg.set_path(os.path.join(os.path.expanduser("~"), "Downloads"))
+
         self.window.show_dialog(dlg)
 
     def _on_browse_cancel(self):
