@@ -37,7 +37,7 @@ class AnimPlayer:
 
         self._add_ui()
 
-        self.step = 0
+        self.step = 1000
 
         self.frame_idx = 0
 
