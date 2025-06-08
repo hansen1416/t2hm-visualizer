@@ -121,21 +121,6 @@ class AnimPlayer:
 
         self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
-    def _add_ui(self):
-        em = self.window.theme.font_size
-
-        self._widget_layout = gui.Vert(
-            0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
-        )
-
-        button = gui.Button("Run Function")
-        button.set_on_clicked(self._on_run_button_click)
-        self._widget_layout.add_child(button)
-
-        self.window.add_child(self._widget_layout)
-
-        # panel.frame = gui.Rect(10, 10, 1, 50)
-
     def _on_layout(self, layout_context):
 
         r = self.window.content_rect
@@ -148,6 +133,40 @@ class AnimPlayer:
             ).height,
         )
         self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
+
+    def _add_ui(self):
+        em = self.window.theme.font_size
+
+        self._widget_layout = gui.Vert(
+            0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
+        )
+
+        select_button = gui.Button("Browse")
+        select_button.set_on_clicked(self._on_browse)
+        self._widget_layout.add_child(select_button)
+
+        play_button = gui.Button("Play Animation")
+        play_button.set_on_clicked(self._on_run_button_click)
+        self._widget_layout.add_child(play_button)
+
+        self.window.add_child(self._widget_layout)
+
+    def _on_browse(self):
+        dlg = gui.FileDialog(
+            gui.FileDialog.OPEN_DIR, "Select Folder", self.window.theme
+        )
+        dlg.set_on_cancel(self._on_browse_cancel)
+        dlg.set_on_done(self._on_browse_done)
+        self.window.show_dialog(dlg)
+
+    def _on_browse_cancel(self):
+        self.window.close_dialog()
+
+    def _on_browse_done(self, folder_path):
+        self.window.close_dialog()
+
+        print(folder_path)
+        print(111111111111)
 
     def _on_run_button_click(self):
 
