@@ -2,7 +2,9 @@ import os
 
 import cv2
 import torch
+import numpy as np
 import open3d as o3d
+from smplx import SMPLX
 
 
 def get_checkerboard_plane(plane_width=20, num_boxes=15, center=True):
@@ -107,3 +109,39 @@ def gvhmr_result_loader(joints_glob_path, verts_glob_path):
     cap.release()
 
     return total_frame_count, 1 / fps, verts_glob, joints_glob
+
+
+def motionx_loader(file_path):
+
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
+
+    motion = np.load(file_path)
+    motion = torch.tensor(motion).float()
+
+    root_orient = motion[:, :3].to(device)
+    pose_body = motion[:, 3 : 3 + 63].to(device)
+    pose_hand = motion[:, 66 : 66 + 90].to(device)
+    pose_jaw = motion[:, 66 + 90 : 66 + 93].to(device)
+    face_expr = motion[:, 159 : 159 + 50].to(device)
+    face_shape = motion[:, 209 : 209 + 100].to(device)
+    trans = motion[:, 309 : 309 + 3].to(device)
+    betas = motion[:, 312:].to(device)
+
+    left_hand_pose = pose_hand[:, :45]
+    right_hand_pose = pose_hand[:, 45:]
+
+    # output = smplx.forward(
+    #     betas=betas,
+    #     transl=trans,
+    #     global_orient=root_orient,
+    #     body_pose=pose_body,
+    #     jaw_pose=pose_jaw,
+    #     left_hand_pose=left_hand_pose,
+    #     right_hand_pose=right_hand_pose,
+    #     expression=face_expr,
+    # )
+
+    # print(output)
+
+    return root_orient, pose_body, trans, betas

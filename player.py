@@ -1,13 +1,15 @@
 import os
+import glob
 import time
 import threading
 
+import torch
 import open3d as o3d
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 from smplx import SMPL, SMPLX, MANO, FLAME
 
-from utils.utils import get_checkerboard_plane, gvhmr_result_loader
+from utils.utils import get_checkerboard_plane, gvhmr_result_loader, motionx_loader
 
 
 class AnimPlayer:
@@ -165,7 +167,18 @@ class AnimPlayer:
         dlg.set_on_cancel(self._on_browse_cancel)
         dlg.set_on_done(self._on_browse_done)
 
-        dlg.set_path(os.path.join(os.path.expanduser("~"), "Downloads"))
+        dlg.set_path(
+            os.path.join(
+                os.path.expanduser("~"),
+                "Downloads",
+                "motionx",
+                "motion",
+                "motion_generation",
+                "smplx322",
+                "animation",
+                "animation",
+            )
+        )
 
         self.window.show_dialog(dlg)
 
@@ -173,6 +186,7 @@ class AnimPlayer:
         self.window.close_dialog()
 
     def _on_browse_done(self, folder_path):
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.window.close_dialog()
 
         joints_glob = os.path.join(
@@ -204,6 +218,51 @@ class AnimPlayer:
                 msg.add_child(msg_layout)
                 self.window.show_dialog(msg)
                 return
+
+        # elif bool(glob.glob(os.path.join(folder_path, "*.npy"))):
+        elif bool(
+            glob.glob(
+                os.path.join(
+                    folder_path,
+                    "Ways_to_Jump_+_Sit_+_Fall_KEVINBPARRY_clip4_vertices.pt",
+                )
+            )
+        ):
+
+            files = glob.glob(
+                os.path.join(
+                    folder_path,
+                    "Ways_to_Jump_+_Sit_+_Fall_KEVINBPARRY_clip4_vertices.pt",
+                )
+            )
+
+            motion_data = torch.load(files[0], map_location=device)
+
+            self.total_frame_count = motion_data.shape[0]
+            self.step = 1 / 30  # assuming 30 FPS
+            self.verts_glob = motion_data.cpu().numpy()
+
+            # print(self.verts_glob.shape)
+
+            # self.total_frame_count, self.step, self.verts_glob
+
+            # root_orient, pose_body, trans, betas = motionx_loader(files[0])
+
+            # print(root_orient[0, :].shape, pose_body.shape, trans.shape)
+
+            # for i in range(root_orient.shape[0]):
+
+            #     output = self.smpl_model.forward(
+            #         global_orient=root_orient[i, :].unsqueeze(0),
+            #         body_pose=pose_body[i, :].unsqueeze(0),
+            #         transl=trans[i, :].unsqueeze(0),
+            #     )
+
+            #     print(output.vertices.shape)
+
+            #     break
+
+            # return
 
         self.frame_idx = 0
         self.play_animation = True

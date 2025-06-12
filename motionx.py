@@ -85,43 +85,53 @@ for file in os.listdir(folder):
 
         print(label)
 
-    left_hand_pose = motion_parms["pose_hand"][:, :45]
-    right_hand_pose = motion_parms["pose_hand"][:, 45:]
+    left_hand_poses = motion_parms["pose_hand"][:, :45]
+    right_hand_poses = motion_parms["pose_hand"][:, 45:]
 
-    betas = motion_parms["betas"][0, :].unsqueeze(0).to(device)
-    trans = motion_parms["trans"][0, :].unsqueeze(0).to(device)
-    root_orient = motion_parms["root_orient"][0, :].unsqueeze(0).to(device)
-    pose_body = motion_parms["pose_body"][0, :].unsqueeze(0).to(device)
-    pose_jaw = motion_parms["pose_jaw"][0, :].unsqueeze(0).to(device)
-    left_hand_pose = left_hand_pose[0, :].unsqueeze(0).to(device)
-    right_hand_pose = right_hand_pose[0, :].unsqueeze(0).to(device)
-    face_expr = motion_parms["face_expr"][0, :10].unsqueeze(0).to(device)
-
-    print(f"betas shape: {betas.shape}")
-    print(f"trans shape: {trans.shape}")
-    print(f"root_orient shape: {root_orient.shape}")
-    print(f"pose_body shape: {pose_body.shape}")
-    print(f"pose_jaw shape: {pose_jaw.shape}")
-    print(f"left_hand_pose shape: {left_hand_pose.shape}")
-    print(f"right_hand_pose shape: {right_hand_pose.shape}")
-    print(f"face_expr shape: {face_expr.shape}")
-
-    output = smplx.forward(
-        betas=betas,
-        transl=trans,
-        global_orient=root_orient,
-        body_pose=pose_body,
-        jaw_pose=pose_jaw,
-        leye_pose=torch.zeros([1, 3]).to(device),
-        reye_pose=torch.zeros([1, 3]).to(device),
-        left_hand_pose=left_hand_pose,
-        right_hand_pose=right_hand_pose,
-        expression=face_expr,
+    vertices = torch.zeros(
+        (motion_parms["root_orient"].shape[0], 10475, 3), device=device
     )
 
-    vertices = output.vertices
+    for i in range(motion_parms["pose_body"].shape[0]):
+
+        betas = motion_parms["betas"][i, :].unsqueeze(0).to(device)
+        trans = motion_parms["trans"][i, :].unsqueeze(0).to(device)
+        root_orient = motion_parms["root_orient"][i, :].unsqueeze(0).to(device)
+        pose_body = motion_parms["pose_body"][i, :].unsqueeze(0).to(device)
+        pose_jaw = motion_parms["pose_jaw"][i, :].unsqueeze(0).to(device)
+        left_hand_pose = left_hand_poses[i, :].unsqueeze(0).to(device)
+        right_hand_pose = right_hand_poses[i, :].unsqueeze(0).to(device)
+        face_expr = motion_parms["face_expr"][i, :10].unsqueeze(0).to(device)
+
+        # print(f"betas shape: {betas.shape}")
+        # print(f"trans shape: {trans.shape}")
+        # print(f"root_orient shape: {root_orient.shape}")
+        # print(f"pose_body shape: {pose_body.shape}")
+        # print(f"pose_jaw shape: {pose_jaw.shape}")
+        # print(f"left_hand_pose shape: {left_hand_pose.shape}")
+        # print(f"right_hand_pose shape: {right_hand_pose.shape}")
+        # print(f"face_expr shape: {face_expr.shape}")
+
+        output = smplx.forward(
+            betas=betas,
+            transl=trans,
+            global_orient=root_orient,
+            body_pose=pose_body,
+            jaw_pose=pose_jaw,
+            leye_pose=torch.zeros([1, 3]).to(device),
+            reye_pose=torch.zeros([1, 3]).to(device),
+            left_hand_pose=left_hand_pose,
+            right_hand_pose=right_hand_pose,
+            expression=face_expr,
+        )
+
+        vertices[i, :, :] = output.vertices
 
     print(f"vertices shape: {vertices.shape}")
+
+    # save the vertices to a file
+    vertices_file = os.path.join(folder, filename + "_vertices.pt")
+    torch.save(vertices, vertices_file)
 
     # print(basename)
     break
