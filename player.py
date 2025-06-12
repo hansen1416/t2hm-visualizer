@@ -175,22 +175,35 @@ class AnimPlayer:
     def _on_browse_done(self, folder_path):
         self.window.close_dialog()
 
-        try:
+        joints_glob = os.path.join(
+            folder_path,
+            "joints_glob.pt",
+        )
 
-            self.total_frame_count, self.step, self.verts_glob, _ = gvhmr_result_loader(
-                folder_path
-            )
+        verts_glob = os.path.join(
+            folder_path,
+            "verts_glob.pt",
+        )
 
-        except Exception as e:
-            msg = gui.Dialog("Error")
-            msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-            msg_layout.add_child(gui.Label(f"Invalid folder selected."))
-            ok_button = gui.Button("OK")
-            ok_button.set_on_clicked(lambda: self.window.close_dialog())
-            msg_layout.add_child(ok_button)
-            msg.add_child(msg_layout)
-            self.window.show_dialog(msg)
-            return
+        if os.path.exists(joints_glob) and os.path.exists(verts_glob):
+            # then it's a wham result folder, visualize the mesh
+
+            try:
+
+                self.total_frame_count, self.step, self.verts_glob, _ = (
+                    gvhmr_result_loader(joints_glob, verts_glob)
+                )
+
+            except Exception as e:
+                msg = gui.Dialog("Error")
+                msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
+                msg_layout.add_child(gui.Label(f"Invalid folder selected."))
+                ok_button = gui.Button("OK")
+                ok_button.set_on_clicked(lambda: self.window.close_dialog())
+                msg_layout.add_child(ok_button)
+                msg.add_child(msg_layout)
+                self.window.show_dialog(msg)
+                return
 
         self.frame_idx = 0
         self.play_animation = True

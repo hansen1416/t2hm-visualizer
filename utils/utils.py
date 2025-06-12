@@ -38,23 +38,15 @@ def get_checkerboard_plane(plane_width=20, num_boxes=15, center=True):
     return meshes
 
 
-def gvhmr_result_loader(results_folder):
+def gvhmr_result_loader(joints_glob_path, verts_glob_path):
+
+    # get the folder name from the path
+    results_folder = os.path.dirname(joints_glob_path)
 
     video_name = os.path.basename(os.path.normpath(results_folder))
 
-    joints_glob = torch.load(
-        os.path.join(
-            results_folder,
-            "joints_glob.pt",
-        )
-    )
-
-    verts_glob = torch.load(
-        os.path.join(
-            results_folder,
-            "verts_glob.pt",
-        )
-    )
+    joints_glob: torch.FloatTensor = torch.load(joints_glob_path)
+    verts_glob: torch.FloatTensor = torch.load(verts_glob_path)
 
     joints_glob = joints_glob.cpu().numpy()
     verts_glob = verts_glob.cpu().numpy()
