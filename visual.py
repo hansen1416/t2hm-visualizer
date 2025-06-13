@@ -250,6 +250,10 @@ class AnimPlayer:
                 left_hand_pose = pose_hand[:, :45]  # left hand articulation
                 right_hand_pose = pose_hand[:, 45:]  # right hand articulation
 
+                # root_orient[:, 0] *= -1
+                # root_orient[:, 1] *= -1
+                # root_orient[:, 2] *= -1
+
                 # Get mesh vertices
                 output = self.smpl_model.forward(
                     betas=betas,
