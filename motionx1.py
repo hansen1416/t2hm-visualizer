@@ -46,7 +46,7 @@ for file in os.listdir(data_folder):
     trans = motion[:, 309 : 309 + 3]  # controls the global body position
     betas = motion[:, 312:]  # controls the body shape. Body shape is static
 
-    print(root_orient.shape, pose_body.shape, trans.shape, betas.shape, face_expr.shape)
+    # print(root_orient.shape, pose_body.shape, trans.shape, betas.shape, face_expr.shape)
     # torch.Size([62, 3]) torch.Size([62, 63]) torch.Size([62, 3]) torch.Size([62, 10])
 
     leye_pose = torch.zeros(root_orient.shape[0], 3, device=device)
@@ -55,10 +55,8 @@ for file in os.listdir(data_folder):
     left_hand_pose = pose_hand[:, :45]  # left hand articulation
     right_hand_pose = pose_hand[:, 45:]  # right hand articulation
 
-    # shapedirs = torch.cat([self.shapedirs, self.expr_dirs], dim=-1)
-    # shapedirs = torch.zeros([shapedirs.shape[0], shapedirs.shape[1], 60], device=shapedirs.device, dtype=shapedirs.dtype)
-
-    # print(shapedirs.shape, self.shapedirs.shape, self.expr_dirs.shape,111111111111111)
+    # print(root_orient.shape)
+    # root_orient[:, 1], root_orient[:, 2] = root_orient[:, 2], root_orient[:, 1]
 
     # Get mesh vertices
     output = model(
