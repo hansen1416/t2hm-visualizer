@@ -177,11 +177,10 @@ class AnimPlayer:
             os.path.join(
                 os.path.expanduser("~"),
                 "Downloads",
-                "motionx",
+                "motion-x",
                 "motion",
                 "motion_generation",
                 "smplx322",
-                "animation",
                 "animation",
             )
         )
@@ -232,6 +231,9 @@ class AnimPlayer:
             try:
 
                 # todo list all files and let user select one
+
+                print(f"play: {files[0]}")
+
                 motion = np.load(files[0])
                 motion = torch.tensor(motion).float().to(self.device)
 
