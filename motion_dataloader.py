@@ -1,7 +1,7 @@
 import os.path
 from glob import glob
 from itertools import islice
-
+import math
 
 import torch
 import numpy as np
@@ -67,8 +67,13 @@ class MotionDataLoader:
         left_hand_pose = pose_hand[:, :45]  # left hand articulation
         right_hand_pose = pose_hand[:, 45:]  # right hand articulation
 
+        # -90° rotation around Y-axis (in axis-angle format)
+        # fix_rotation = torch.tensor([-math.pi, 0, 0], device=root_orient.device)
+
+        # Apply the fix to each frame
+        # root_orient = root_orient + fix_rotation  # broadcasted addition
         # swap the x,z axes for `root_orient`
-        root_orient[:, [0, 1]] = root_orient[:, [1, 0]]
+        # root_orient[:, [0, 1, 2]] = root_orient[:, [2, 1, 0]]
 
         motion_params = {
             "betas": betas,
