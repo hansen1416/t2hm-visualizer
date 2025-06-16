@@ -11,11 +11,15 @@ import open3d.visualization.rendering as rendering
 from smplx import SMPLX
 
 from utils.utils import get_checkerboard_plane, gvhmr_result_loader
+from motion_dataloader import MotionDataLoader
 
 
 class AnimPlayer:
 
     def __init__(self):
+
+        self.dataloader = MotionDataLoader()
+        self.category = self.dataloader.categories[0]
 
         # We need to initalize the application, which finds the necessary shaders
         # for rendering and prepares the cross-platform window abstraction.
@@ -155,9 +159,14 @@ class AnimPlayer:
             0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
         )
 
-        select_button = gui.Button("Browse")
-        select_button.set_on_clicked(self._on_browse)
-        self._widget_layout.add_child(select_button)
+        # Category Selector
+        self.category_combo = gui.Combobox()
+        categories = self.dataloader.categories
+        for c in categories:
+            self.category_combo.add_item(c)
+        self.category_combo.set_on_selection_changed(self._on_category_changed)
+        self._widget_layout.add_child(gui.Label("Select Category"))
+        self._widget_layout.add_child(self.category_combo)
 
         self.play_button = gui.Button("Pause")
         self.play_button.enabled = False
@@ -166,128 +175,74 @@ class AnimPlayer:
 
         self.window.add_child(self._widget_layout)
 
-    def _on_browse(self):
-        dlg = gui.FileDialog(
-            gui.FileDialog.OPEN_DIR, "Select Folder", self.window.theme
-        )
-        dlg.set_on_cancel(self._on_browse_cancel)
-        dlg.set_on_done(self._on_browse_done)
+    def _on_category_changed(self, value, _):
+        self.category = value
 
-        dlg.set_path(
-            os.path.join(
-                os.path.expanduser("~"),
-                "Downloads",
-                "motion-x",
-                "motion",
-                "motion_generation",
-                "smplx322",
-                "animation",
+        motion_file, video_file = self.dataloader.get(0, self.category)
+
+        print(motion_file, video_file)
+        # todo separate load data and play animation
+
+        try:
+
+            # todo list all files and let user select one
+
+            print(f"play: {motion_file}")
+
+            motion = np.load(motion_file)
+            motion = torch.tensor(motion).float().to(self.device)
+
+            root_orient = motion[:, :3]  # controls the global root orientation
+            pose_body = motion[:, 3 : 3 + 63]  # controls the body
+            pose_hand = motion[:, 66 : 66 + 90]  # controls the finger articulation
+            pose_jaw = motion[:, 66 + 90 : 66 + 93]  # controls the yaw pose
+            face_expr = motion[:, 159 : 159 + 50]  # controls the face expression
+            face_shape = motion[:, 209 : 209 + 100]  # controls the face shape
+            trans = motion[:, 309 : 309 + 3]  # controls the global body position
+            betas = motion[:, 312:]  # controls the body shape. Body shape is static
+
+            leye_pose = torch.zeros(root_orient.shape[0], 3, device=self.device)
+            reye_pose = torch.zeros(root_orient.shape[0], 3, device=self.device)
+
+            left_hand_pose = pose_hand[:, :45]  # left hand articulation
+            right_hand_pose = pose_hand[:, 45:]  # right hand articulation
+
+            # root_orient[:, 0] *= -1
+            # root_orient[:, 1] *= -1
+            # root_orient[:, 2] *= -1
+
+            # Get mesh vertices
+            output = self.smpl_model.forward(
+                betas=betas,
+                body_pose=pose_body,
+                global_orient=root_orient,
+                transl=trans,
+                batch_size=motion.shape[0],
+                jaw_pose=pose_jaw,
+                leye_pose=leye_pose,
+                reye_pose=reye_pose,
+                left_hand_pose=left_hand_pose,
+                right_hand_pose=right_hand_pose,
+                expression=face_expr,
+                return_verts=True,
+                # num_betas=60,
             )
-        )
+            # [n, 10475, 3]
+            self.verts_glob = output.vertices.cpu().numpy()
 
-        self.window.show_dialog(dlg)
+            self.total_frame_count = self.verts_glob.shape[0]
+            self.step = 1 / 30  # assuming 30 FPS
 
-    def _on_browse_cancel(self):
-        self.window.close_dialog()
-
-    def _on_browse_done(self, folder_path):
-
-        self.window.close_dialog()
-
-        joints_glob = os.path.join(
-            folder_path,
-            "joints_glob.pt",
-        )
-
-        verts_glob = os.path.join(
-            folder_path,
-            "verts_glob.pt",
-        )
-
-        if os.path.exists(joints_glob) and os.path.exists(verts_glob):
-            # then it's a wham result folder, visualize the mesh
-
-            try:
-
-                self.total_frame_count, self.step, self.verts_glob, _ = (
-                    gvhmr_result_loader(joints_glob, verts_glob)
-                )
-
-            except Exception as e:
-                msg = gui.Dialog("Error")
-                msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-                msg_layout.add_child(gui.Label(f"Invalid folder selected."))
-                ok_button = gui.Button("OK")
-                ok_button.set_on_clicked(lambda: self.window.close_dialog())
-                msg_layout.add_child(ok_button)
-                msg.add_child(msg_layout)
-                self.window.show_dialog(msg)
-                return
-
-        elif bool(glob.glob(os.path.join(folder_path, "*.npy"))):
-
-            files = glob.glob(os.path.join(folder_path, "*.npy"))
-
-            try:
-
-                # todo list all files and let user select one
-
-                print(f"play: {files[0]}")
-
-                motion = np.load(files[0])
-                motion = torch.tensor(motion).float().to(self.device)
-
-                root_orient = motion[:, :3]  # controls the global root orientation
-                pose_body = motion[:, 3 : 3 + 63]  # controls the body
-                pose_hand = motion[:, 66 : 66 + 90]  # controls the finger articulation
-                pose_jaw = motion[:, 66 + 90 : 66 + 93]  # controls the yaw pose
-                face_expr = motion[:, 159 : 159 + 50]  # controls the face expression
-                face_shape = motion[:, 209 : 209 + 100]  # controls the face shape
-                trans = motion[:, 309 : 309 + 3]  # controls the global body position
-                betas = motion[:, 312:]  # controls the body shape. Body shape is static
-
-                leye_pose = torch.zeros(root_orient.shape[0], 3, device=self.device)
-                reye_pose = torch.zeros(root_orient.shape[0], 3, device=self.device)
-
-                left_hand_pose = pose_hand[:, :45]  # left hand articulation
-                right_hand_pose = pose_hand[:, 45:]  # right hand articulation
-
-                # root_orient[:, 0] *= -1
-                # root_orient[:, 1] *= -1
-                # root_orient[:, 2] *= -1
-
-                # Get mesh vertices
-                output = self.smpl_model.forward(
-                    betas=betas,
-                    body_pose=pose_body,
-                    global_orient=root_orient,
-                    transl=trans,
-                    batch_size=motion.shape[0],
-                    jaw_pose=pose_jaw,
-                    leye_pose=leye_pose,
-                    reye_pose=reye_pose,
-                    left_hand_pose=left_hand_pose,
-                    right_hand_pose=right_hand_pose,
-                    expression=face_expr,
-                    return_verts=True,
-                    # num_betas=60,
-                )
-                # [n, 10475, 3]
-                self.verts_glob = output.vertices.cpu().numpy()
-
-                self.total_frame_count = self.verts_glob.shape[0]
-                self.step = 1 / 30  # assuming 30 FPS
-
-            except Exception as e:
-                msg = gui.Dialog("Error")
-                msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-                msg_layout.add_child(gui.Label(f"Invalid folder selected."))
-                ok_button = gui.Button("OK")
-                ok_button.set_on_clicked(lambda: self.window.close_dialog())
-                msg_layout.add_child(ok_button)
-                msg.add_child(msg_layout)
-                self.window.show_dialog(msg)
-                return
+        except Exception as e:
+            msg = gui.Dialog("Error")
+            msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
+            msg_layout.add_child(gui.Label(f"Invalid folder selected."))
+            ok_button = gui.Button("OK")
+            ok_button.set_on_clicked(lambda: self.window.close_dialog())
+            msg_layout.add_child(ok_button)
+            msg.add_child(msg_layout)
+            self.window.show_dialog(msg)
+            return
 
         self.frame_idx = 0
         self.play_animation = True
