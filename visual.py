@@ -1,8 +1,8 @@
 import os
-import glob
 import time
 import threading
 
+import cv2
 import torch
 import numpy as np
 import open3d as o3d
@@ -20,6 +20,8 @@ class AnimPlayer:
 
         self.dataloader = MotionDataLoader()
         self.category = self.dataloader.categories[0]
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # We need to initalize the application, which finds the necessary shaders
         # for rendering and prepares the cross-platform window abstraction.
@@ -51,6 +53,7 @@ class AnimPlayer:
         self.total_frame_count = 0
 
         self.verts_glob = None
+        self.video_file = None
 
         self._play_animation = False
 
@@ -109,7 +112,6 @@ class AnimPlayer:
     def _init_smpl(self):
         self._scene.scene.remove_geometry("__body_model__")
 
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model_path = os.path.join("data", "body_models", "smplx")
 
         self.smpl_model = SMPLX(
@@ -139,19 +141,6 @@ class AnimPlayer:
 
         self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
-    def _on_layout(self, layout_context):
-
-        r = self.window.content_rect
-        self._scene.frame = r
-        width = 17 * layout_context.theme.font_size
-        height = min(
-            r.height,
-            self._widget_layout.calc_preferred_size(
-                layout_context, gui.Widget.Constraints()
-            ).height,
-        )
-        self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
-
     def _add_ui(self):
         em = self.window.theme.font_size
 
@@ -175,63 +164,46 @@ class AnimPlayer:
 
         self.window.add_child(self._widget_layout)
 
+        self._video_widget = gui.ImageWidget()
+        self.window.add_child(self._video_widget)
+
+    def _on_layout(self, layout_context):
+
+        r = self.window.content_rect
+        self._scene.frame = r
+        width = 17 * layout_context.theme.font_size
+        height = min(
+            r.height,
+            self._widget_layout.calc_preferred_size(
+                layout_context, gui.Widget.Constraints()
+            ).height,
+        )
+        self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
+
+        self._video_widget.frame = gui.Rect(0, 0, 320, 240)  # x, y, width, height
+
     def _on_category_changed(self, value, _):
         self.category = value
 
-        motion_file, video_file = self.dataloader.get(0, self.category)
-
-        print(motion_file, video_file)
-        # todo separate load data and play animation
-
         try:
 
-            # todo list all files and let user select one
-
-            print(f"play: {motion_file}")
-
-            motion = np.load(motion_file)
-            motion = torch.tensor(motion).float().to(self.device)
-
-            root_orient = motion[:, :3]  # controls the global root orientation
-            pose_body = motion[:, 3 : 3 + 63]  # controls the body
-            pose_hand = motion[:, 66 : 66 + 90]  # controls the finger articulation
-            pose_jaw = motion[:, 66 + 90 : 66 + 93]  # controls the yaw pose
-            face_expr = motion[:, 159 : 159 + 50]  # controls the face expression
-            face_shape = motion[:, 209 : 209 + 100]  # controls the face shape
-            trans = motion[:, 309 : 309 + 3]  # controls the global body position
-            betas = motion[:, 312:]  # controls the body shape. Body shape is static
-
-            leye_pose = torch.zeros(root_orient.shape[0], 3, device=self.device)
-            reye_pose = torch.zeros(root_orient.shape[0], 3, device=self.device)
-
-            left_hand_pose = pose_hand[:, :45]  # left hand articulation
-            right_hand_pose = pose_hand[:, 45:]  # right hand articulation
-
-            # root_orient[:, 0] *= -1
-            # root_orient[:, 1] *= -1
-            # root_orient[:, 2] *= -1
+            motion_params, self.video_file = self.dataloader.get(0, self.category)
 
             # Get mesh vertices
-            output = self.smpl_model.forward(
-                betas=betas,
-                body_pose=pose_body,
-                global_orient=root_orient,
-                transl=trans,
-                batch_size=motion.shape[0],
-                jaw_pose=pose_jaw,
-                leye_pose=leye_pose,
-                reye_pose=reye_pose,
-                left_hand_pose=left_hand_pose,
-                right_hand_pose=right_hand_pose,
-                expression=face_expr,
-                return_verts=True,
-                # num_betas=60,
-            )
+            output = self.smpl_model.forward(return_verts=True, **motion_params)
             # [n, 10475, 3]
             self.verts_glob = output.vertices.cpu().numpy()
 
-            self.total_frame_count = self.verts_glob.shape[0]
-            self.step = 1 / 30  # assuming 30 FPS
+            # cap = cv2.VideoCapture(video_file)
+
+            # self.total_frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            # fps = cap.get(cv2.CAP_PROP_FPS)
+
+            # cap.release()
+
+            # self.total_frame_count = self.verts_glob.shape[0]
+            # self.step = 1 / fps
 
         except Exception as e:
             msg = gui.Dialog("Error")
@@ -256,27 +228,54 @@ class AnimPlayer:
 
         while True:
 
-            while self.play_animation and self.frame_idx < self.total_frame_count:
+            if not self.play_animation:
+                time.sleep(0.1)
+                continue
 
-                self.body_mesh.vertices = o3d.utility.Vector3dVector(
-                    self.verts_glob[self.frame_idx]
-                )
+            cap = cv2.VideoCapture(self.video_file)
 
-                def update_scene():
-                    self._scene.scene.remove_geometry("__body_model__")
-                    self._scene.scene.add_geometry(
-                        "__body_model__", self.body_mesh, self.material
-                    )
+            fps = cap.get(cv2.CAP_PROP_FPS)
 
-                gui.Application.instance.post_to_main_thread(self.window, update_scene)
-                self.frame_idx += 1
-                time.sleep(self.step)  # ~30 FPS
+            while cap.isOpened():
+                ret, frame = cap.read()
 
-                # last frame, reset everything
-                if self.frame_idx == self.total_frame_count:
-
-                    self.frame_idx = 0
+                if not ret:
+                    cap.release()
                     self.play_animation = False
+                    break
+
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img_o3d = o3d.geometry.Image(frame)
+
+                # Schedule image update in the GUI thread
+                def update():
+                    self._video_widget.update_image(img_o3d)
+
+                gui.Application.instance.post_to_main_thread(self.window, update)
+
+                time.sleep(1 / fps)
+
+            # while self.play_animation and self.frame_idx < self.total_frame_count:
+
+            #     self.body_mesh.vertices = o3d.utility.Vector3dVector(
+            #         self.verts_glob[self.frame_idx]
+            #     )
+
+            #     def update_scene():
+            #         self._scene.scene.remove_geometry("__body_model__")
+            #         self._scene.scene.add_geometry(
+            #             "__body_model__", self.body_mesh, self.material
+            #         )
+
+            #     gui.Application.instance.post_to_main_thread(self.window, update_scene)
+            #     self.frame_idx += 1
+            #     time.sleep(self.step)  # ~30 FPS
+
+            #     # last frame, reset everything
+            #     if self.frame_idx == self.total_frame_count:
+
+            #         self.frame_idx = 0
+            #         self.play_animation = False
 
     def run(self):
         gui.Application.instance.run()
