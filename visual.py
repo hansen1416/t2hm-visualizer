@@ -10,7 +10,7 @@ import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 from smplx import SMPLX
 
-from utils.utils import get_checkerboard_plane, gvhmr_result_loader
+from utils.utils import get_checkerboard_plane
 from motion_dataloader import MotionDataLoader
 
 

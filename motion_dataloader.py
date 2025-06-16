@@ -67,6 +67,9 @@ class MotionDataLoader:
         left_hand_pose = pose_hand[:, :45]  # left hand articulation
         right_hand_pose = pose_hand[:, 45:]  # right hand articulation
 
+        # swap the x,z axes for `root_orient`
+        root_orient[:, [0, 2]] = root_orient[:, [2, 0]]
+
         motion_params = {
             "betas": betas,
             "body_pose": pose_body,
