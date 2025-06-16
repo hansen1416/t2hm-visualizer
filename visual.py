@@ -46,14 +46,10 @@ class AnimPlayer:
 
         self._add_ui()
 
-        self.step = 1000
-
-        self.frame_idx = 0
-
-        self.total_frame_count = 0
-
         self.verts_glob = None
         self.video_file = None
+
+        self.frame_idx = 0
 
         self._play_animation = False
 
@@ -194,17 +190,6 @@ class AnimPlayer:
             # [n, 10475, 3]
             self.verts_glob = output.vertices.cpu().numpy()
 
-            # cap = cv2.VideoCapture(video_file)
-
-            # self.total_frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-            # fps = cap.get(cv2.CAP_PROP_FPS)
-
-            # cap.release()
-
-            # self.total_frame_count = self.verts_glob.shape[0]
-            # self.step = 1 / fps
-
         except Exception as e:
             msg = gui.Dialog("Error")
             msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
@@ -235,47 +220,40 @@ class AnimPlayer:
             cap = cv2.VideoCapture(self.video_file)
 
             fps = cap.get(cv2.CAP_PROP_FPS)
+            step = 1 / fps
 
             while cap.isOpened():
                 ret, frame = cap.read()
 
                 if not ret:
                     cap.release()
+                    self.frame_idx = 0
                     self.play_animation = False
                     break
+
+                if self.frame_idx >= self.verts_glob.shape[0]:
+                    self.frame_idx = 0
+
+                self.body_mesh.vertices = o3d.utility.Vector3dVector(
+                    self.verts_glob[self.frame_idx]
+                )
 
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img_o3d = o3d.geometry.Image(frame)
 
                 # Schedule image update in the GUI thread
                 def update():
+                    self._scene.scene.remove_geometry("__body_model__")
+                    self._scene.scene.add_geometry(
+                        "__body_model__", self.body_mesh, self.material
+                    )
+
                     self._video_widget.update_image(img_o3d)
 
                 gui.Application.instance.post_to_main_thread(self.window, update)
 
-                time.sleep(1 / fps)
-
-            # while self.play_animation and self.frame_idx < self.total_frame_count:
-
-            #     self.body_mesh.vertices = o3d.utility.Vector3dVector(
-            #         self.verts_glob[self.frame_idx]
-            #     )
-
-            #     def update_scene():
-            #         self._scene.scene.remove_geometry("__body_model__")
-            #         self._scene.scene.add_geometry(
-            #             "__body_model__", self.body_mesh, self.material
-            #         )
-
-            #     gui.Application.instance.post_to_main_thread(self.window, update_scene)
-            #     self.frame_idx += 1
-            #     time.sleep(self.step)  # ~30 FPS
-
-            #     # last frame, reset everything
-            #     if self.frame_idx == self.total_frame_count:
-
-            #         self.frame_idx = 0
-            #         self.play_animation = False
+                self.frame_idx += 1
+                time.sleep(step)
 
     def run(self):
         gui.Application.instance.run()
