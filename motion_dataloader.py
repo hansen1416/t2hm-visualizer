@@ -165,11 +165,84 @@ class MotionDataLoader:
 
         return motion_params, video_file
 
+    def get_global_json(self, idx=0, category="animation"):
+        motion_folder_path = os.path.join(
+            self.root_path, "motion", "mesh_recovery", "global_motion", category
+        )
+
+        motion_file = get_nth_file(motion_folder_path, idx, ext=".json")
+
+        video_name = os.path.splitext(os.path.basename(motion_file))[0]
+
+        video_file = os.path.join(
+            self.root_path, "video", category, f"{video_name}.mp4"
+        )
+        # check if video file exists
+        assert os.path.exists(video_file), f"Video file {video_file} does not exist."
+
+        db = COCO(motion_file)
+
+        n_frames = len(db.anns.keys())
+
+        betas = torch.zeros(n_frames, 10, device=self.device)
+        body_pose = torch.zeros(n_frames, 63, device=self.device)
+        global_orient = torch.zeros(n_frames, 3, device=self.device)
+        trans = torch.zeros(n_frames, 3, device=self.device)
+        jaw_pose = torch.zeros(n_frames, 3, device=self.device)
+        leye_pose = torch.zeros(n_frames, 3, device=self.device)
+        reye_pose = torch.zeros(n_frames, 3, device=self.device)
+        left_hand_pose = torch.zeros(n_frames, 45, device=self.device)
+        right_hand_pose = torch.zeros(n_frames, 45, device=self.device)
+        expression = torch.zeros(n_frames, 10, device=self.device)
+
+        for i, aid in enumerate(db.anns.keys()):
+            ann = db.anns[aid]
+
+            betas[i] = torch.tensor(ann["smplx_params"]["betas"], device=self.device)
+            body_pose[i] = torch.tensor(
+                ann["smplx_params"]["pose_body"], device=self.device
+            )
+            global_orient[i] = torch.tensor(
+                ann["smplx_params"]["root_orient"], device=self.device
+            )
+            trans[i] = torch.tensor(ann["smplx_params"]["trans"], device=self.device)
+            jaw_pose[i] = torch.tensor(
+                ann["smplx_params"]["pose_jaw"], device=self.device
+            )
+
+            left_hand_pose[i] = torch.tensor(
+                ann["smplx_params"]["lhand_pose"], device=self.device
+            )
+            right_hand_pose[i] = torch.tensor(
+                ann["smplx_params"]["rhand_pose"], device=self.device
+            )
+
+            expression[i] = torch.tensor(
+                ann["smplx_params"]["face_expr"], device=self.device
+            )
+
+        motion_params = {
+            "betas": betas,  # torch.Size([n, 10])
+            "body_pose": body_pose,  # torch.Size([45, 63])
+            "global_orient": global_orient,  # torch.Size([45, 3])
+            "transl": trans,  # torch.Size([45, 3])
+            "batch_size": n_frames,
+            "jaw_pose": jaw_pose,  # torch.Size([45, 3])
+            "leye_pose": leye_pose,  # torch.Size([45, 3])
+            "reye_pose": reye_pose,  # torch.Size([45, 3])
+            "left_hand_pose": left_hand_pose,  # torch.Size([45, 45])
+            "right_hand_pose": right_hand_pose,  # torch.Size([45, 45])
+            "expression": expression,  # torch.Size([45, 50])
+        }
+
+        return motion_params, video_file
+
 
 if __name__ == "__main__":
     loader = MotionDataLoader()
     # motion_params, video_file = loader.get(0, "animation")
-    motion_params, video_file = loader.get_local_json(0, "animation")
+    # motion_params, video_file = loader.get_local_json(0, "animation")
+    motion_params, video_file = loader.get_global_json(0, "animation")
     print(motion_params)
     print(video_file)
     print("Motion data loaded successfully.")
