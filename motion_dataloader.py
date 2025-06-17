@@ -73,7 +73,9 @@ class MotionDataLoader:
         # Apply the fix to each frame
         # root_orient = root_orient + fix_rotation  # broadcasted addition
         # swap the x,z axes for `root_orient`
-        # root_orient[:, [0, 1, 2]] = root_orient[:, [2, 1, 0]]
+        # 1,0,2； 0,2,1； 1,2,0； 2,0,1； 2,1,0
+        root_orient[:, [1, 0, 2]] = root_orient[:, [0, 1, 2]]
+        # root_orient[:, 1] = -root_orient[:, 1]
 
         motion_params = {
             "betas": betas,
