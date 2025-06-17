@@ -114,8 +114,8 @@ class AnimPlayer:
             model_path,
             gender="neutral",
             use_pca=False,
-            # num_expression_coeffs=50, # for motion_generation *.npy files
-            num_expression_coeffs=10,  # for local motion json files
+            num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
+            # num_expression_coeffs=10,  # for local motion json files
         ).to(self.device)
 
         faces = self.smpl_model.faces
@@ -185,7 +185,10 @@ class AnimPlayer:
         try:
 
             # motion_params, self.video_file = self.dataloader.get(0, self.category)
-            motion_params, self.video_file = self.dataloader.get_local_json(
+            # motion_params, self.video_file = self.dataloader.get_local_json(
+            #     0, self.category
+            # )
+            motion_params, self.video_file = self.dataloader.get_global_json(
                 0, self.category
             )
 

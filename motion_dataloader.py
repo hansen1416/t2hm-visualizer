@@ -193,7 +193,7 @@ class MotionDataLoader:
         reye_pose = torch.zeros(n_frames, 3, device=self.device)
         left_hand_pose = torch.zeros(n_frames, 45, device=self.device)
         right_hand_pose = torch.zeros(n_frames, 45, device=self.device)
-        expression = torch.zeros(n_frames, 10, device=self.device)
+        expression = torch.zeros(n_frames, 50, device=self.device)
 
         for i, aid in enumerate(db.anns.keys()):
             ann = db.anns[aid]
@@ -210,12 +210,12 @@ class MotionDataLoader:
                 ann["smplx_params"]["pose_jaw"], device=self.device
             )
 
-            left_hand_pose[i] = torch.tensor(
-                ann["smplx_params"]["lhand_pose"], device=self.device
-            )
-            right_hand_pose[i] = torch.tensor(
-                ann["smplx_params"]["rhand_pose"], device=self.device
-            )
+            # left_hand_pose[i] = torch.tensor(
+            #     ann["smplx_params"]["lhand_pose"], device=self.device
+            # )
+            # right_hand_pose[i] = torch.tensor(
+            #     ann["smplx_params"]["rhand_pose"], device=self.device
+            # )
 
             expression[i] = torch.tensor(
                 ann["smplx_params"]["face_expr"], device=self.device
