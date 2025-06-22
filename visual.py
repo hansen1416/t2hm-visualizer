@@ -264,9 +264,16 @@ class AnimPlayer:
                 if self.frame_idx >= self.verts_glob.shape[0]:
                     self.frame_idx = 0
 
-                self.body_mesh.vertices = o3d.utility.Vector3dVector(
-                    self.verts_glob[self.frame_idx]
-                )
+                # self.body_mesh.vertices = o3d.utility.Vector3dVector(
+                #     self.verts_glob[self.frame_idx]
+                # )
+
+                verts = self.verts_glob[self.frame_idx].copy()
+
+                verts[:, 1] *= -1  # Flip Y
+                verts[:, 2] *= -1  # Flip Z
+
+                self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
 
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img_o3d = o3d.geometry.Image(frame)
