@@ -114,8 +114,8 @@ class AnimPlayer:
             model_path,
             gender="neutral",
             use_pca=False,
-            num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
-            # num_expression_coeffs=10,  # for local motion json files
+            # num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
+            num_expression_coeffs=10,  # for local motion json files
         ).to(self.device)
 
         faces = self.smpl_model.faces
@@ -184,10 +184,31 @@ class AnimPlayer:
 
         try:
 
+            # if False:
+
+            #     motion_params, self.video_file = self.dataloader.get_local_json(
+            #         0, self.category
+            #     )
+
+            #     # Get mesh vertices
+            #     output = self.smpl_model.forward(
+            #         betas=motion_params["betas"],
+            #         body_pose=motion_params["body_pose"],
+            #         global_orient=motion_params["global_orient"],
+            #         right_hand_pose=motion_params["right_hand_pose"],
+            #         left_hand_pose=motion_params["left_hand_pose"],
+            #         jaw_pose=motion_params["jaw_pose"],
+            #         leye_pose=motion_params["leye_pose"],
+            #         reye_pose=motion_params["reye_pose"],
+            #         expression=motion_params["expression"],
+            #     )
+
+            #     mesh_cam = output.vertices + motion_params["transl"][:, None, :]
+            #     self.verts_glob = mesh_cam.detach().cpu().numpy()
+
+            # else:
+
             # motion_params, self.video_file = self.dataloader.get(0, self.category)
-            # motion_params, self.video_file = self.dataloader.get_local_json(
-            #     0, self.category
-            # )
             motion_params, self.video_file = self.dataloader.get_global_json(
                 0, self.category
             )
@@ -206,6 +227,8 @@ class AnimPlayer:
             msg_layout.add_child(ok_button)
             msg.add_child(msg_layout)
             self.window.show_dialog(msg)
+
+            print(e)
             return
 
         self.frame_idx = 0
