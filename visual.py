@@ -84,7 +84,7 @@ class AnimPlayer:
         self._scene.scene.scene.enable_sun_light(True)
 
     def _add_ground(self):
-        gp = get_checkerboard_plane(plane_width=10, num_boxes=10)
+        gp = get_checkerboard_plane(plane_width=10, num_boxes=10, groun_level=-1.2)
 
         for idx, g in enumerate(gp):
             g.compute_vertex_normals()
@@ -164,6 +164,13 @@ class AnimPlayer:
         self._video_widget = gui.ImageWidget()
         self.window.add_child(self._video_widget)
 
+        # Create a horizontal layout to align the label to the left
+        self.label_layout = gui.Horiz()
+        self.label = gui.Label("Text description")
+        self.label_layout.add_child(self.label)
+
+        self.window.add_child(self.label_layout)
+
     def _on_layout(self, layout_context):
 
         r = self.window.content_rect
@@ -178,6 +185,8 @@ class AnimPlayer:
         self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
 
         self._video_widget.frame = gui.Rect(0, 0, 320, 240)  # x, y, width, height
+
+        self.label_layout.frame = gui.Rect(1000, 900, 300, 30)
 
     def _on_category_changed(self, value, _):
         self.category = value
