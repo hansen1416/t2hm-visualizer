@@ -180,6 +180,15 @@ class MotionDataLoader:
         # check if video file exists
         assert os.path.exists(video_file), f"Video file {video_file} does not exist."
 
+        text_file = os.path.join(
+            self.root_path, "text", "semantic_label", category, f"{video_name}.txt"
+        )
+
+        assert os.path.exists(text_file), f"Text file {text_file} does not exist."
+
+        with open(text_file, "r") as f:
+            label = f.read()
+
         db = COCO(motion_file)
 
         n_frames = len(db.anns.keys())
@@ -202,10 +211,10 @@ class MotionDataLoader:
             body_pose[i] = torch.tensor(
                 ann["smplx_params"]["pose_body"], device=self.device
             )
-            global_orient[i] = torch.tensor(
-                ann["smplx_params"]["root_orient"], device=self.device
-            )
-            trans[i] = torch.tensor(ann["smplx_params"]["trans"], device=self.device)
+            # global_orient[i] = torch.tensor(
+            #     ann["smplx_params"]["root_orient"], device=self.device
+            # )
+            # trans[i] = torch.tensor(ann["smplx_params"]["trans"], device=self.device)
             jaw_pose[i] = torch.tensor(
                 ann["smplx_params"]["pose_jaw"], device=self.device
             )
@@ -221,6 +230,12 @@ class MotionDataLoader:
                 ann["smplx_params"]["face_expr"][:10], device=self.device
             )
 
+        # print(global_orient.shape)
+
+        # # flip y,z of global_orient
+        # global_orient[:, 1] *= -1
+        # global_orient[:, 2] *= -1
+
         motion_params = {
             "betas": betas,  # torch.Size([n, 10])
             "body_pose": body_pose,  # torch.Size([45, 63])
@@ -235,7 +250,7 @@ class MotionDataLoader:
             "expression": expression,  # torch.Size([45, 50])
         }
 
-        return motion_params, video_file
+        return motion_params, video_file, label
 
 
 if __name__ == "__main__":

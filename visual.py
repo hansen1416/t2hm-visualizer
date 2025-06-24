@@ -186,7 +186,7 @@ class AnimPlayer:
 
         self._video_widget.frame = gui.Rect(0, 0, 320, 240)  # x, y, width, height
 
-        self.label_layout.frame = gui.Rect(1000, 900, 300, 30)
+        self.label_layout.frame = gui.Rect(1000, 900, 700, 80)
 
     def _on_category_changed(self, value, _):
         self.category = value
@@ -218,14 +218,16 @@ class AnimPlayer:
             # else:
 
             # motion_params, self.video_file = self.dataloader.get(0, self.category)
-            motion_params, self.video_file = self.dataloader.get_global_json(
-                0, self.category
+            motion_params, self.video_file, text_label = (
+                self.dataloader.get_global_json(0, self.category)
             )
 
             # Get mesh vertices
             output = self.smpl_model.forward(return_verts=True, **motion_params)
             # [n, 10475, 3]
             self.verts_glob = output.vertices.cpu().numpy()
+
+            self.label.text = text_label
 
         except Exception as e:
             msg = gui.Dialog("Error")
@@ -279,8 +281,8 @@ class AnimPlayer:
 
                 verts = self.verts_glob[self.frame_idx].copy()
 
-                verts[:, 1] *= -1  # Flip Y
-                verts[:, 2] *= -1  # Flip Z
+                # verts[:, 1] *= -1  # Flip Y
+                # verts[:, 2] *= -1  # Flip Z
 
                 self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
 
