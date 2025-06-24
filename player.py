@@ -170,13 +170,9 @@ class AnimPlayer:
         dlg.set_path(
             os.path.join(
                 os.path.expanduser("~"),
-                "Downloads",
-                "motionx",
-                "motion",
-                "motion_generation",
-                "smplx322",
-                "animation",
-                "animation",
+                "repos",
+                "t2hm-dataset",
+                "outputs",
             )
         )
 
