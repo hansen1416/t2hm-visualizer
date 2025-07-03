@@ -1,4 +1,5 @@
 import os
+from itertools import islice
 
 import cv2
 import torch
@@ -145,3 +146,9 @@ def motionx_loader(file_path):
     # print(output)
 
     return root_orient, pose_body, trans, betas
+
+
+def get_nth_file(folder, n=0, ext=".npy"):
+    with os.scandir(folder) as entries:
+        npy_files = (entry.path for entry in entries if entry.name.endswith(ext))
+        return next(islice(npy_files, n, None), None)

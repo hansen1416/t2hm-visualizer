@@ -1,16 +1,11 @@
 import os.path
 from glob import glob
-from itertools import islice
 
 import torch
 import numpy as np
 from pycocotools.coco import COCO
 
-
-def get_nth_file(folder, n, ext=".npy"):
-    with os.scandir(folder) as entries:
-        npy_files = (entry.path for entry in entries if entry.name.endswith(ext))
-        return next(islice(npy_files, n, None), None)
+from utils.utils import get_nth_file
 
 
 class MotionDataLoader:
