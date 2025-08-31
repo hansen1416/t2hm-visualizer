@@ -11,7 +11,7 @@ from utils.utils import get_nth_file
 class MotionDataLoader:
 
     def __init__(self):
-        self.root_path = os.path.join(os.path.expanduser("~"), "Downloads", "motion-x")
+        self.root_path = os.path.join(os.path.expanduser("~"), "datasets", "motion-x")
 
         self.categories = [
             "animation",

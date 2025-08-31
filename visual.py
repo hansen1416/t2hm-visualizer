@@ -154,6 +154,14 @@ class AnimPlayer:
         self._widget_layout.add_child(gui.Label("Select Category"))
         self._widget_layout.add_child(self.category_combo)
 
+        # Index Selector (1–500)
+        self.index_combo = gui.Combobox()
+        for i in range(0, 500):
+            self.index_combo.add_item(str(i))
+        self.index_combo.set_on_selection_changed(self._on_index_changed)
+        self._widget_layout.add_child(gui.Label("Select Index"))
+        self._widget_layout.add_child(self.index_combo)
+
         self.play_button = gui.Button("Pause")
         self.play_button.enabled = False
         self.play_button.set_on_clicked(self._on_run_button_click)
@@ -217,9 +225,43 @@ class AnimPlayer:
 
             # else:
 
-            # motion_params, self.video_file = self.dataloader.get(0, self.category)
+            # # motion_params, self.video_file = self.dataloader.get(0, self.category)
+            # motion_params, self.video_file, text_label = (
+            #     self.dataloader.get_global_json(0, self.category)
+            # )
+
+            # # Get mesh vertices
+            # output = self.smpl_model.forward(return_verts=True, **motion_params)
+            # # [n, 10475, 3]
+            # self.verts_glob = output.vertices.cpu().numpy()
+
+            # self.label.text = text_label
+            pass
+
+        except Exception as e:
+            msg = gui.Dialog("Error")
+            msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
+            msg_layout.add_child(gui.Label(f"Invalid folder selected."))
+            ok_button = gui.Button("OK")
+            ok_button.set_on_clicked(lambda: self.window.close_dialog())
+            msg_layout.add_child(ok_button)
+            msg.add_child(msg_layout)
+            self.window.show_dialog(msg)
+
+            print(e)
+            return
+
+        # self.frame_idx = 0
+        # self.play_animation = True
+        # self.play_button.enabled = True  # disables
+
+    def _on_index_changed(self, value, _):
+        try:
+            self.selected_index = int(value)
+            # print(f"Index selected: {self.selected_index}")
+
             motion_params, self.video_file, text_label = (
-                self.dataloader.get_global_json(0, self.category)
+                self.dataloader.get_global_json(self.selected_index, self.category)
             )
 
             # Get mesh vertices
@@ -230,9 +272,11 @@ class AnimPlayer:
             self.label.text = text_label
 
         except Exception as e:
+            self.selected_index = None
+
             msg = gui.Dialog("Error")
             msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-            msg_layout.add_child(gui.Label(f"Invalid folder selected."))
+            msg_layout.add_child(gui.Label(f"Invalid index selected."))
             ok_button = gui.Button("OK")
             ok_button.set_on_clicked(lambda: self.window.close_dialog())
             msg_layout.add_child(ok_button)
