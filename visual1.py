@@ -37,12 +37,6 @@ class AnimPlayer:
 
         self.up_axis = "z"
 
-        self._setup_lighting()
-        self._add_ground()
-        self._set_camera()
-
-        self._init_smpl()
-
         # load the motion data before add ui and after init smpl
         dataset_folder = os.path.join(
             os.path.expanduser("~"), "datasets", "AMASS", "datasets"
@@ -53,15 +47,16 @@ class AnimPlayer:
             device=self.device,
         )
 
-        self.motion_batch = self.pager.get_names_by_page(0)
-        self.motion_data = self.pager.load_single(self.motion_batch[0])
-        self._motion_to_verts()
-
+        self._setup_lighting()
+        self._add_ground()
+        self._set_camera()
         self._add_ui()
 
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        self._init_smpl()
 
-        self._play_animation = False
+        fisrt_path = self._load_batch(0)
+
+        self._load_data(fisrt_path)
 
         # thread animation testing
         threading.Thread(target=self.animate_mesh, daemon=True).start()
@@ -159,7 +154,82 @@ class AnimPlayer:
         self.material = rendering.MaterialRecord()
         self.material.shader = "defaultLit"
 
-    def _motion_to_verts(self):
+        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+
+    def _add_ui(self):
+        em = self.window.theme.font_size
+
+        self._widget_layout = gui.Vert(
+            0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
+        )
+
+        # Category Selector
+        self.category_combo = gui.Combobox()
+
+        # Index Selector (1–500)
+        self.index_combo = gui.Combobox()
+
+        for i in range(1, self.pager.total_pages + 1):
+            self.index_combo.add_item(str(i))
+
+        self.index_combo.set_on_selection_changed(self._on_page_changed)
+        self._widget_layout.add_child(gui.Label("Select Page"))
+        self._widget_layout.add_child(self.index_combo)
+
+        self.category_combo.set_on_selection_changed(self._on_motion_changed)
+        self._widget_layout.add_child(gui.Label("Select Motion"))
+        self._widget_layout.add_child(self.category_combo)
+
+        self.play_button = gui.Button("Pause")
+        self.play_button.enabled = False
+        self.play_button.set_on_clicked(self._on_run_button_click)
+        self._widget_layout.add_child(self.play_button)
+
+        self.window.add_child(self._widget_layout)
+
+        # Create a horizontal layout to align the label to the left
+        self.label_layout = gui.Horiz()
+        self.label = gui.Label("Text description")
+        self.label_layout.add_child(self.label)
+
+        self.window.add_child(self.label_layout)
+
+    def _on_layout(self, layout_context):
+
+        r = self.window.content_rect
+        self._scene.frame = r
+        width = 17 * layout_context.theme.font_size
+        height = min(
+            r.height,
+            self._widget_layout.calc_preferred_size(
+                layout_context, gui.Widget.Constraints()
+            ).height,
+        )
+        self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
+
+        self.label_layout.frame = gui.Rect(1000, 900, 700, 80)
+
+    def _load_batch(self, page_index: int):
+
+        self.play_animation = False
+        self.frame_idx = 0
+        self.play_button.enabled = False
+
+        self.motion_batch = self.pager.get_names_by_page(page_index)
+
+        self.category_combo.clear_items()
+
+        # Add new motion names
+        for motion_name in self.motion_batch:
+            self.category_combo.add_item(motion_name)
+
+        return self.motion_batch[0]
+
+    def _load_data(self, file_path):
+
+        self.play_animation = False
+
+        self.motion_data = self.pager.load_single(file_path)
 
         motion_params = {
             # "betas": self.motion_data["betas"],
@@ -197,75 +267,17 @@ class AnimPlayer:
             self.verts_glob[self.frame_idx].copy()
         )
 
-    def _add_ui(self):
-        em = self.window.theme.font_size
+        self._scene.scene.remove_geometry("__body_model__")
+        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
-        self._widget_layout = gui.Vert(
-            0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
-        )
-
-        # Category Selector
-        self.category_combo = gui.Combobox()
-
-        # Index Selector (1–500)
-        self.index_combo = gui.Combobox()
-
-        for i in range(1, self.pager.total_pages + 1):
-            self.index_combo.add_item(str(i))
-
-        self.index_combo.set_on_selection_changed(self._on_page_changed)
-        self._widget_layout.add_child(gui.Label("Select Page"))
-        self._widget_layout.add_child(self.index_combo)
-
-        for moition_names in self.motion_batch:
-            self.category_combo.add_item(moition_names)
-
-        self.category_combo.set_on_selection_changed(self._on_motion_changed)
-        self._widget_layout.add_child(gui.Label("Select Motion"))
-        self._widget_layout.add_child(self.category_combo)
-
-        self.play_button = gui.Button("Pause")
+        self.frame_idx = 0
         self.play_button.enabled = True
-        self.play_button.set_on_clicked(self._on_run_button_click)
-        self._widget_layout.add_child(self.play_button)
-
-        self.window.add_child(self._widget_layout)
-
-        self._video_widget = gui.ImageWidget()
-        self.window.add_child(self._video_widget)
-
-        # Create a horizontal layout to align the label to the left
-        self.label_layout = gui.Horiz()
-        self.label = gui.Label("Text description")
-        self.label_layout.add_child(self.label)
-
-        self.window.add_child(self.label_layout)
-
-    def _on_layout(self, layout_context):
-
-        r = self.window.content_rect
-        self._scene.frame = r
-        width = 17 * layout_context.theme.font_size
-        height = min(
-            r.height,
-            self._widget_layout.calc_preferred_size(
-                layout_context, gui.Widget.Constraints()
-            ).height,
-        )
-        self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
-
-        self._video_widget.frame = gui.Rect(0, 0, 320, 240)  # x, y, width, height
-
-        self.label_layout.frame = gui.Rect(1000, 900, 700, 80)
 
     def _on_motion_changed(self, value, _):
 
         try:
 
-            self.play_animation = False
-
-            self.motion_data = self.pager.load_single(value)
-            self._motion_to_verts()
+            self._load_data(value)
 
         except Exception as e:
             msg = gui.Dialog("Error")
@@ -280,27 +292,11 @@ class AnimPlayer:
             print(e)
             return
 
-        # self.frame_idx = 0
-        # self.play_animation = True
-        # self.play_button.enabled = True  # disables
-
     def _on_page_changed(self, value, _):
         try:
 
-            self.play_animation = False
-            self.frame_idx = 0
-            self.play_button.enabled = True  # disables
-
-            self.motion_batch = self.pager.get_names_by_page(int(value) - 1)
-
-            self.category_combo.clear_items()
-
-            # Add new motion names
-            for motion_name in self.motion_batch:
-                self.category_combo.add_item(motion_name)
-
-            self.motion_data = self.pager.load_single(self.motion_batch[0])
-            self._motion_to_verts()
+            motion_path = self._load_batch(int(value) - 1)
+            self._load_data(motion_path)
 
         except Exception as e:
             self.selected_index = None
