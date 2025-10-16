@@ -34,14 +34,14 @@ class AnimPlayer:
         self.window.add_child(self._scene)
 
         self.window.set_on_layout(self._on_layout)
-
+        # for AMASS use z-up, for motion-x use y-up
         self.up_axis = "z"
 
         # load the motion data before add ui and after init smpl
         dataset_folder = os.path.join(
             os.path.expanduser("~"), "datasets", "AMASS", "datasets"
         )
-
+        # load all the motion data paths
         self.pager = AmassPager(
             dataset_root=dataset_folder,
             device=self.device,
@@ -52,10 +52,12 @@ class AnimPlayer:
         self._set_camera()
         self._add_ui()
 
+        # load smpl model
         self._init_smpl()
 
+        # load first page
         fisrt_path = self._load_batch(0)
-
+        # load first motion
         self._load_data(fisrt_path)
 
         # thread animation testing
@@ -157,6 +159,9 @@ class AnimPlayer:
         self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
     def _add_ui(self):
+        """
+        Add page selection, motion selection and text description
+        """
         em = self.window.theme.font_size
 
         self._widget_layout = gui.Vert(
@@ -195,6 +200,7 @@ class AnimPlayer:
         self.window.add_child(self.label_layout)
 
     def _on_layout(self, layout_context):
+        """adjust the layout position"""
 
         r = self.window.content_rect
         self._scene.frame = r
@@ -206,10 +212,11 @@ class AnimPlayer:
             ).height,
         )
         self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
-
-        self.label_layout.frame = gui.Rect(1000, 900, 700, 80)
+        # place the label at the bottom left
+        self.label_layout.frame = gui.Rect(0, r.height - 80, 700, 80)
 
     def _load_batch(self, page_index: int):
+        """load motion path for give page"""
 
         self.play_animation = False
         self.frame_idx = 0
@@ -217,6 +224,7 @@ class AnimPlayer:
 
         self.motion_batch = self.pager.get_names_by_page(page_index)
 
+        # do not forget to update motion selection
         self.category_combo.clear_items()
 
         # Add new motion names
@@ -226,6 +234,7 @@ class AnimPlayer:
         return self.motion_batch[0]
 
     def _load_data(self, motion_name: str):
+        """load motion data"""
 
         self.play_animation = False
 
