@@ -8,7 +8,9 @@ import open3d as o3d
 from smplx import SMPLX
 
 
-def get_checkerboard_plane(plane_width=20, num_boxes=15, center=True, groun_level=0):
+def get_checkerboard_plane(
+    plane_width=20, num_boxes=15, center=True, ground_level=0, up_axis="y"
+):
 
     pw = plane_width / num_boxes
     # white = [0.8, 0.8, 0.8]
@@ -19,21 +21,36 @@ def get_checkerboard_plane(plane_width=20, num_boxes=15, center=True, groun_leve
     meshes = []
     for i in range(num_boxes):
         for j in range(num_boxes):
-            c = i * pw, j * pw
-            # ground = trimesh.primitives.Box(
-            #     center=[0, 0, -0.0001],
-            #     extents=[pw, pw, 0.0002]
-            # )
+
             ground = o3d.geometry.TriangleMesh.create_box(
                 width=pw, height=0.0002, depth=pw
             )
 
+            cx, cz = i * pw, j * pw
+
             if center:
-                c = c[0] + (pw / 2) - (plane_width / 2), c[1] + (pw / 2) - (
-                    plane_width / 2
-                )
-            # trans = trimesh.transformations.scale_and_translate(scale=1, translate=[c[0], c[1], 0])
-            ground.translate([c[0], groun_level, c[1]])
+                cx = cx + (pw / 2) - (plane_width / 2)
+                cz = cz + (pw / 2) - (plane_width / 2)
+
+            # Orient thin dimension (originally Y) to the chosen up-axis
+            if up_axis == "y":
+                # default: no rotation; plane lies on Y = ground_level, spans X–Z
+                ground.translate([cx, ground_level, cz])
+            elif up_axis == "z":
+                # rotate +90° about X so original Y → Z (thin axis becomes Z)
+                R = ground.get_rotation_matrix_from_xyz((+np.pi / 2, 0.0, 0.0))
+                ground.rotate(R, center=(0.0, 0.0, 0.0))
+                # plane lies on Z = ground_level, spans X–Y
+                ground.translate([cx, cz, ground_level])
+            elif up_axis == "x":
+                # rotate -90° about Z so original Y → X
+                R = ground.get_rotation_matrix_from_xyz((0.0, 0.0, -np.pi / 2))
+                ground.rotate(R, center=(0.0, 0.0, 0.0))
+                # plane lies on X = ground_level, spans Y–Z
+                ground.translate([ground_level, cx, cz])
+            else:
+                raise ValueError("up_axis must be one of {'x','y','z'}")
+
             # ground.apply_transform(trimesh.transformations.rotation_matrix(np.rad2deg(-120), direction=[1,0,0]))
             ground.paint_uniform_color(black if ((i + j) % 2) == 0 else white)
             meshes.append(ground)
