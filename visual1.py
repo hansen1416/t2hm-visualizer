@@ -136,6 +136,7 @@ class AnimPlayer:
             use_pca=False,
             # num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
             num_expression_coeffs=10,  # for local motion json files
+            num_betas=16,
         ).to(self.device)
 
         faces = self.smpl_model.faces
@@ -244,9 +245,9 @@ class AnimPlayer:
 
         motion_params = {
             # "betas": self.motion_data["betas"],
-            "betas": torch.zeros(
-                (self.motion_data["poses"].shape[0], 10), dtype=torch.float32
-            ).to(self.device),
+            "betas": self.motion_data["betas"]
+            .unsqueeze(0)
+            .repeat(self.motion_data["poses"].shape[0], 1),
             "transl": self.motion_data["trans"],
             "global_orient": self.motion_data["poses"][:, :3],
             "body_pose": self.motion_data["poses"][:, 3 : 63 + 3],
