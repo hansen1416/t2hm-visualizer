@@ -225,11 +225,13 @@ class AnimPlayer:
 
         return self.motion_batch[0]
 
-    def _load_data(self, file_path):
+    def _load_data(self, motion_name: str):
 
         self.play_animation = False
 
-        self.motion_data = self.pager.load_single(file_path)
+        self.motion_data = self.pager.load_single(motion_name)
+
+        self.label.text = motion_name
 
         motion_params = {
             # "betas": self.motion_data["betas"],
