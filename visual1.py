@@ -105,14 +105,17 @@ class AnimPlayer:
 
         center = [0, 0, 0]  # center of the ground plane
 
+        height = 2.0
+        far = 6.0
+
         if self.up_axis == "y":
-            eye = [0, 1.0, 4.0]  # slightly above and behind
+            eye = [0, height, far]  # slightly above and behind
             up = [0, 1, 0]
         elif self.up_axis == "z":
-            eye = [0, 4.0, 1.0]  # slightly above and behind
+            eye = [0, far, height]  # slightly above and behind
             up = [0, 0, 1]
         elif self.up_axis == "x":
-            eye = [4.0, 0, 1.0]  # slightly above and behind
+            eye = [far, 0, height]  # slightly above and behind
             up = [1, 0, 0]
         else:
             raise ValueError("up_axis must be one of {'x','y','z'}")
