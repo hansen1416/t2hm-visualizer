@@ -40,6 +40,19 @@ class AmassPager:
 
         pattern = os.path.join(self.root, "**", "*.npz")
         files = glob(pattern, recursive=True)
+
+        invalid_path_file = "invalid_amass_files.txt"
+
+        if os.path.exists(invalid_path_file):
+            # read paths to exclude
+            with open(invalid_path_file, "r") as f:
+                invalid_files = {line.strip() for line in f if line.strip()}
+
+            # filter out invalid files
+            files = [f for f in files if f not in invalid_files]
+
+            print(f"exclude {len(invalid_files)} invalid path")
+
         files.sort()  # deterministic order
         if shuffle:
             rng = random.Random(seed)
