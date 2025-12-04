@@ -146,7 +146,12 @@ class AnimPlayer:
 
         faces = self.smpl_model.faces
 
-        model_output = self.smpl_model()
+        # e.g. one shape vector for a single body
+        betas = torch.zeros(1, 16, device=self.device)  # (B, num_betas)
+        betas[0, 0] = 5.0  # change first shape component
+        betas[0, 1] = -0.5  # change second component, etc.
+
+        model_output = self.smpl_model(betas=betas)
         verts = model_output.vertices[0].detach().cpu().numpy()
 
         self.body_mesh = o3d.geometry.TriangleMesh()
