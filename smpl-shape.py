@@ -39,16 +39,6 @@ class AnimPlayer:
         # for AMASS use z-up, for motion-x use y-up
         self.up_axis = "y"
 
-        # load the motion data before add ui and after init smpl
-        dataset_folder = os.path.join(
-            os.path.expanduser("~"), "datasets", "AMASS", "datasets"
-        )
-        # load all the motion data paths
-        self.pager = AmassPager(
-            dataset_root=dataset_folder,
-            device=self.device,
-        )
-
         self._setup_lighting()
         self._add_ground()
         self._set_camera()
@@ -56,13 +46,6 @@ class AnimPlayer:
 
         # load smpl model
         self._init_smpl()
-
-        # # load first page
-        # fisrt_path = self._load_batch(0)
-        # # load first motion
-        # self._load_data(fisrt_path)
-
-        self._play_animation = False
 
     @property
     def play_animation(self):
@@ -170,6 +153,21 @@ class AnimPlayer:
         # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
         self._update_body_mesh_from_betas()
 
+    def _update_body_mesh_from_betas(self):
+        with torch.no_grad():
+            model_output = self.smpl_model(betas=self.betas)
+
+        verts = model_output.vertices[0].detach().cpu().numpy()
+
+        min_y = -np.min(verts[:, 1])
+        verts[:, 1] += min_y
+
+        self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
+        self.body_mesh.compute_vertex_normals()
+
+        self._scene.scene.remove_geometry("__body_model__")
+        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+
     def _add_ui(self):
         """
         Add page selection, motion selection and text description
@@ -179,30 +177,6 @@ class AnimPlayer:
         self._widget_layout = gui.Vert(
             0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
         )
-
-        # Category Selector
-        self.category_combo = gui.Combobox()
-
-        # Index Selector (1–500)
-        self.index_combo = gui.Combobox()
-
-        for i in range(1, self.pager.total_pages + 1):
-            self.index_combo.add_item(str(i))
-
-        self.index_combo.set_on_selection_changed(self._on_page_changed)
-        self._widget_layout.add_child(gui.Label("Select Page"))
-        self._widget_layout.add_child(self.index_combo)
-
-        # self.category_combo.set_on_selection_changed(self._on_motion_changed)
-        # self._widget_layout.add_child(gui.Label("Select Motion"))
-        # self._widget_layout.add_child(self.category_combo)
-
-        self.play_button = gui.Button("Pause")
-        self.play_button.enabled = False
-        self.play_button.set_on_clicked(self._on_run_button_click)
-        self._widget_layout.add_child(self.play_button)
-
-        self.window.add_child(self._widget_layout)
 
         self._widget_layout.add_child(gui.Label("SMPL Betas"))
         self.beta_sliders = []
@@ -222,12 +196,7 @@ class AnimPlayer:
             self.beta_sliders.append(slider)
             self._widget_layout.add_child(slider_layout)
 
-        # Create a horizontal layout to align the label to the left
-        self.label_layout = gui.Horiz()
-        self.label = gui.Label("Text description")
-        self.label_layout.add_child(self.label)
-
-        self.window.add_child(self.label_layout)
+        self.window.add_child(self._widget_layout)
 
     def _on_layout(self, layout_context):
         """adjust the layout position"""
@@ -241,122 +210,8 @@ class AnimPlayer:
                 layout_context, gui.Widget.Constraints()
             ).height,
         )
+
         self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
-        # place the label at the bottom left
-        self.label_layout.frame = gui.Rect(0, r.height - 80, 700, 80)
-
-    # def _load_batch(self, page_index: int):
-    #     """load motion path for give page"""
-
-    #     self.play_animation = False
-    #     self.frame_idx = 0
-    #     self.play_button.enabled = False
-
-    #     self.motion_batch = self.pager.get_names_by_page(page_index)
-
-    #     # do not forget to update motion selection
-    #     self.category_combo.clear_items()
-
-    #     # Add new motion names
-    #     for motion_name in self.motion_batch:
-    #         self.category_combo.add_item(motion_name)
-
-    #     return self.motion_batch[0]
-
-    # def _load_data(self, motion_name: str):
-    #     """load motion data"""
-
-    #     self.play_animation = False
-
-    #     self.motion_data = self.pager.load_single(motion_name)
-
-    #     self.label.text = motion_name
-
-    #     motion_params = {
-    #         # "betas": self.motion_data["betas"],
-    #         "betas": self.motion_data["betas"]
-    #         .unsqueeze(0)
-    #         .repeat(self.motion_data["poses"].shape[0], 1),
-    #         "transl": self.motion_data["trans"],
-    #         "global_orient": self.motion_data["poses"][:, :3],
-    #         "body_pose": self.motion_data["poses"][:, 3 : 63 + 3],
-    #         "jaw_pose": torch.zeros(
-    #             (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
-    #         ).to(self.device),
-    #         "leye_pose": torch.zeros(
-    #             (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
-    #         ).to(self.device),
-    #         "reye_pose": torch.zeros(
-    #             (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
-    #         ).to(self.device),
-    #         "left_hand_pose": self.motion_data["poses"][:, 66 : 66 + 45],
-    #         "right_hand_pose": self.motion_data["poses"][:, 66 + 45 : 66 + 45 + 45],
-    #         "expression": torch.zeros(
-    #             (self.motion_data["poses"].shape[0], 10), dtype=torch.float32
-    #         ).to(self.device),
-    #     }
-
-    #     output = self.smpl_model.forward(
-    #         return_verts=True,
-    #         **motion_params,
-    #     )
-
-    #     self.verts_glob = output.vertices.cpu().numpy()
-    #     self.frame_idx = 0
-
-    #     self.body_mesh.vertices = o3d.utility.Vector3dVector(
-    #         self.verts_glob[self.frame_idx].copy()
-    #     )
-
-    #     self._scene.scene.remove_geometry("__body_model__")
-    #     self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
-
-    #     self.frame_idx = 0
-    #     self.play_button.enabled = True
-
-    # def _on_motion_changed(self, value, _):
-
-    #     try:
-
-    #         self._load_data(value)
-
-    #     except Exception as e:
-    #         msg = gui.Dialog("Error")
-    #         msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-    #         msg_layout.add_child(gui.Label(f"Invalid folder selected."))
-    #         ok_button = gui.Button("OK")
-    #         ok_button.set_on_clicked(lambda: self.window.close_dialog())
-    #         msg_layout.add_child(ok_button)
-    #         msg.add_child(msg_layout)
-    #         self.window.show_dialog(msg)
-
-    #         print(e)
-    #         return
-
-    def _on_page_changed(self, value, _):
-        try:
-
-            motion_path = self._load_batch(int(value) - 1)
-            self._load_data(motion_path)
-
-        except Exception as e:
-            self.selected_index = None
-
-            msg = gui.Dialog("Error")
-            msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-            msg_layout.add_child(gui.Label(f"Invalid index selected."))
-            ok_button = gui.Button("OK")
-            ok_button.set_on_clicked(lambda: self.window.close_dialog())
-            msg_layout.add_child(ok_button)
-            msg.add_child(msg_layout)
-            self.window.show_dialog(msg)
-
-            print(e)
-            return
-
-    def _on_run_button_click(self):
-
-        self.play_animation = not self.play_animation
 
     def _on_beta_changed(self, index: int, value: float):
         self.betas[0, index] = value
@@ -364,21 +219,6 @@ class AnimPlayer:
 
     def run(self):
         gui.Application.instance.run()
-
-    def _update_body_mesh_from_betas(self):
-        with torch.no_grad():
-            model_output = self.smpl_model(betas=self.betas)
-
-        verts = model_output.vertices[0].detach().cpu().numpy()
-
-        min_y = -np.min(verts[:, 1])
-        verts[:, 1] += min_y
-
-        self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-        self.body_mesh.compute_vertex_normals()
-
-        self._scene.scene.remove_geometry("__body_model__")
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
 
 if __name__ == "__main__":
