@@ -19,6 +19,8 @@ class AnimPlayer:
     def __init__(self):
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.num_betas = 16
+        self.betas = torch.zeros(1, self.num_betas, device=self.device)
 
         # We need to initalize the application, which finds the necessary shaders
         # for rendering and prepares the cross-platform window abstraction.
@@ -61,9 +63,6 @@ class AnimPlayer:
         # self._load_data(fisrt_path)
 
         self._play_animation = False
-
-        # thread animation testing
-        threading.Thread(target=self.animate_mesh, daemon=True).start()
 
     @property
     def play_animation(self):
@@ -141,33 +140,35 @@ class AnimPlayer:
             use_pca=False,
             # num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
             num_expression_coeffs=10,  # for local motion json files
-            num_betas=16,
+            # num_betas=16,
+            num_betas=self.num_betas,
         ).to(self.device)
 
         faces = self.smpl_model.faces
 
-        # e.g. one shape vector for a single body
-        betas = torch.zeros(1, 16, device=self.device)  # (B, num_betas)
-        betas[0, 0] = 5.0  # change first shape component
-        betas[0, 1] = -0.5  # change second component, etc.
+        # # e.g. one shape vector for a single body
+        # betas = torch.zeros(1, 16, device=self.device)  # (B, num_betas)
+        # betas[0, 0] = 5.0  # change first shape component
+        # betas[0, 1] = -0.5  # change second component, etc.
 
-        model_output = self.smpl_model(betas=betas)
-        verts = model_output.vertices[0].detach().cpu().numpy()
+        # model_output = self.smpl_model(betas=betas)
+        # verts = model_output.vertices[0].detach().cpu().numpy()
 
         self.body_mesh = o3d.geometry.TriangleMesh()
 
-        self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
+        # self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
         self.body_mesh.triangles = o3d.utility.Vector3iVector(faces)
-        self.body_mesh.compute_vertex_normals()
+        # self.body_mesh.compute_vertex_normals()
         self.body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
 
-        min_y = -self.body_mesh.get_min_bound()[1]
-        self.body_mesh.translate([0, min_y, 0])
+        # min_y = -self.body_mesh.get_min_bound()[1]
+        # self.body_mesh.translate([0, min_y, 0])
 
         self.material = rendering.MaterialRecord()
         self.material.shader = "defaultLit"
 
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        self._update_body_mesh_from_betas()
 
     def _add_ui(self):
         """
@@ -202,6 +203,24 @@ class AnimPlayer:
         self._widget_layout.add_child(self.play_button)
 
         self.window.add_child(self._widget_layout)
+
+        self._widget_layout.add_child(gui.Label("SMPL Betas"))
+        self.beta_sliders = []
+        for i in range(self.num_betas):
+            slider_layout = gui.Horiz(0.25 * em)
+            slider_label = gui.Label(f"Beta {i}")
+            # slider_label.horizontal_padding_em = 0
+            slider = gui.Slider(gui.Slider.DOUBLE)
+            slider.set_limits(-5.0, 5.0)
+            slider.double_value = float(self.betas[0, i].item())
+            slider.set_on_value_changed(
+                lambda value, idx=i: self._on_beta_changed(idx, value)
+            )
+
+            slider_layout.add_child(slider_label)
+            slider_layout.add_child(slider)
+            self.beta_sliders.append(slider)
+            self._widget_layout.add_child(slider_layout)
 
         # Create a horizontal layout to align the label to the left
         self.label_layout = gui.Horiz()
@@ -339,39 +358,27 @@ class AnimPlayer:
 
         self.play_animation = not self.play_animation
 
-    def animate_mesh(self):
-
-        while True:
-
-            if not self.play_animation:
-                time.sleep(0.1)
-                continue
-
-            step = 1 / 60
-
-            while self.frame_idx < self.verts_glob.shape[0] and self.play_animation:
-
-                verts = self.verts_glob[self.frame_idx].copy()
-
-                self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-
-                # Schedule image update in the GUI thread
-                def update():
-                    self._scene.scene.remove_geometry("__body_model__")
-                    self._scene.scene.add_geometry(
-                        "__body_model__", self.body_mesh, self.material
-                    )
-
-                gui.Application.instance.post_to_main_thread(self.window, update)
-
-                self.frame_idx += 1
-                time.sleep(step)
-
-            if self.frame_idx >= self.verts_glob.shape[0]:
-                self.frame_idx = 0
+    def _on_beta_changed(self, index: int, value: float):
+        self.betas[0, index] = value
+        self._update_body_mesh_from_betas()
 
     def run(self):
         gui.Application.instance.run()
+
+    def _update_body_mesh_from_betas(self):
+        with torch.no_grad():
+            model_output = self.smpl_model(betas=self.betas)
+
+        verts = model_output.vertices[0].detach().cpu().numpy()
+
+        min_y = -np.min(verts[:, 1])
+        verts[:, 1] += min_y
+
+        self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
+        self.body_mesh.compute_vertex_normals()
+
+        self._scene.scene.remove_geometry("__body_model__")
+        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
 
 if __name__ == "__main__":
