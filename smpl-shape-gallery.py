@@ -1,6 +1,5 @@
 import os
-import threading
-import time
+import math
 
 import numpy as np
 import open3d as o3d
@@ -129,17 +128,28 @@ class BodyShapeGallery:
 
         faces = self.smpl_model.faces
 
-        self.body_mesh = o3d.geometry.TriangleMesh()
+        # self.body_mesh = o3d.geometry.TriangleMesh()
 
-        # self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-        self.body_mesh.triangles = o3d.utility.Vector3iVector(faces)
-        # self.body_mesh.compute_vertex_normals()
-        self.body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+        # # self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
+        # self.body_mesh.triangles = o3d.utility.Vector3iVector(faces)
+        # # self.body_mesh.compute_vertex_normals()
+        # self.body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
 
         self.material = rendering.MaterialRecord()
         self.material.shader = "defaultLit"
 
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        self.body_meshes = []
+
+        for mesh_idx in range(self.page_size):
+            body_mesh = o3d.geometry.TriangleMesh()
+            body_mesh.triangles = o3d.utility.Vector3iVector(faces)
+            body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+
+            name = f"__body_model_{mesh_idx}__"
+            self._scene.scene.add_geometry(name, body_mesh, self.material)
+            self.body_meshes.append(body_mesh)
+
+        # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
         self._update_body_mesh_from_betas()
 
     def _update_body_mesh_from_betas(self) -> None:
@@ -193,10 +203,36 @@ class BodyShapeGallery:
 
         print(verts.shape)
 
-        # self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-        # self.body_mesh.compute_vertex_normals()
-        # self._scene.scene.remove_geometry("__body_model__")
-        # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        cols = 4
+        rows = math.ceil(B / cols)
+        spacing = 2.5
+        x_offset = (cols - 1) * spacing / 2
+        z_offset = (rows - 1) * spacing / 2
+
+        for mesh_idx in range(self.page_size):
+            name = f"__body_model_{mesh_idx}__"
+
+            if mesh_idx >= B:
+                self._scene.scene.remove_geometry(name)
+                continue
+
+            row, col = divmod(mesh_idx, cols)
+            offset = np.array(
+                [
+                    col * spacing - x_offset,
+                    0,
+                    row * spacing - z_offset,
+                ]
+            )
+
+            mesh_verts = verts[mesh_idx] + offset
+
+            body_mesh = self.body_meshes[mesh_idx]
+            body_mesh.vertices = o3d.utility.Vector3dVector(mesh_verts)
+            body_mesh.compute_vertex_normals()
+
+            self._scene.scene.remove_geometry(name)
+            self._scene.scene.add_geometry(name, body_mesh, self.material)
 
     def _add_ui(self):
         """
