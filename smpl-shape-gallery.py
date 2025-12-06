@@ -35,9 +35,8 @@ class BodyShapeGallery:
         )
         self.betas = torch.from_numpy(sampled).to(self.device)
 
-        self.beta_index = 0
         self.page_size = 8
-        self.total_pages = int(batch_size / 8)
+        self.total_pages = int(batch_size / self.page_size)
 
         gui.Application.instance.initialize()
 
@@ -150,13 +149,11 @@ class BodyShapeGallery:
             self.body_meshes.append(body_mesh)
 
         # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
-        self._update_body_mesh_from_betas()
+        self._update_body_mesh_from_betas(0)
 
-    def _update_body_mesh_from_betas(self) -> None:
+    def _update_body_mesh_from_betas(self, page: int) -> None:
         current_betas = self.betas[
-            int(self.beta_index * self.page_size) : int(
-                (self.beta_index + 1) * self.page_size
-            ),
+            int(page * self.page_size) : int((page + 1) * self.page_size),
             :,
         ]
 
@@ -200,8 +197,6 @@ class BodyShapeGallery:
 
         min_y = -np.min(verts[:, :, 1])
         verts[:, :, 1] += min_y
-
-        print(verts.shape)
 
         cols = 4
         rows = math.ceil(B / cols)
@@ -260,7 +255,7 @@ class BodyShapeGallery:
         self.window.add_child(self._widget_layout)
 
     def _on_page_changed(self, value, _):
-        pass
+        self._update_body_mesh_from_betas(int(value) - 1)
 
     def _on_layout(self, layout_context) -> None:
         r = self.window.content_rect
