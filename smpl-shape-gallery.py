@@ -17,16 +17,15 @@ class BodyShapeGallery:
     def __init__(
         self,
         num_betas: int = 10,
-        batch_size: int = 32,
+        batch_size: int = 64,
         per_dim_clip: float = 3.0,
         energy_max: float = 20.25,
         energy_min: float = 0.0,
-        seed: int | None = 46,
     ) -> None:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.num_betas = num_betas
 
-        rng = np.random.default_rng(seed)
+        rng = np.random.default_rng(46)
         sampled = sample_betas_energy_uniform(
             batch_size=batch_size,
             num_betas=num_betas,
@@ -36,9 +35,10 @@ class BodyShapeGallery:
             rng=rng,
         )
         self.betas = torch.from_numpy(sampled).to(self.device)
-        self.beta_index = 0
 
-        self.total_pages = 8
+        self.beta_index = 0
+        self.page_size = 8
+        self.total_pages = int(batch_size / 8)
 
         gui.Application.instance.initialize()
 
@@ -139,22 +139,64 @@ class BodyShapeGallery:
         self.material = rendering.MaterialRecord()
         self.material.shader = "defaultLit"
 
-        # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
-        # self._update_body_mesh_from_betas()
+        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        self._update_body_mesh_from_betas()
 
     def _update_body_mesh_from_betas(self) -> None:
-        current_betas = self.betas[self.beta_index : self.beta_index + 1]
+        current_betas = self.betas[
+            int(self.beta_index * self.page_size) : int(
+                (self.beta_index + 1) * self.page_size
+            ),
+            :,
+        ]
+
+        betas = torch.as_tensor(current_betas, dtype=torch.float32, device=self.device)
+        B = betas.shape[0]
+
+        # Neutral pose / expression for the whole batch
+        body_pose = torch.zeros(
+            B, self.smpl_model.NUM_BODY_JOINTS * 3, device=self.device
+        )
+        global_orient = torch.zeros(B, 3, device=self.device)
+        left_hand_pose = torch.zeros(
+            B, self.smpl_model.NUM_HAND_JOINTS * 3, device=self.device
+        )
+        right_hand_pose = torch.zeros(
+            B, self.smpl_model.NUM_HAND_JOINTS * 3, device=self.device
+        )
+        expression = torch.zeros(
+            B, self.smpl_model.num_expression_coeffs, device=self.device
+        )
+
+        # Head and eye joints: (B, 3) so that .reshape(-1, 1, 3) works
+        jaw_pose = torch.zeros(B, 3, device=self.device)
+        leye_pose = torch.zeros(B, 3, device=self.device)
+        reye_pose = torch.zeros(B, 3, device=self.device)
+
         with torch.no_grad():
-            model_output = self.smpl_model(betas=current_betas)
+            model_output = self.smpl_model(
+                betas=betas,
+                body_pose=body_pose,
+                global_orient=global_orient,
+                left_hand_pose=left_hand_pose,
+                right_hand_pose=right_hand_pose,
+                expression=expression,
+                jaw_pose=jaw_pose,
+                leye_pose=leye_pose,
+                reye_pose=reye_pose,
+            )
 
-        verts = model_output.vertices[0].detach().cpu().numpy()
-        min_y = -np.min(verts[:, 1])
-        verts[:, 1] += min_y
+        verts = model_output.vertices.detach().cpu().numpy()
 
-        self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-        self.body_mesh.compute_vertex_normals()
-        self._scene.scene.remove_geometry("__body_model__")
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        min_y = -np.min(verts[:, :, 1])
+        verts[:, :, 1] += min_y
+
+        print(verts.shape)
+
+        # self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
+        # self.body_mesh.compute_vertex_normals()
+        # self._scene.scene.remove_geometry("__body_model__")
+        # self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
     def _add_ui(self):
         """
