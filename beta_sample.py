@@ -63,6 +63,8 @@ def sample_betas_energy_uniform(
             collected.append(cand)
 
     betas = np.concatenate(collected, axis=0)[:batch_size]
+    # for smplsim, 4 decimal is good enough
+    betas = np.round(betas, 4)
     return betas
 
 
@@ -74,12 +76,17 @@ if __name__ == "__main__":
     energy_max = 20.25  # = 4.5^2, i.e. ‖β‖ ≤ 4.5 (your chosen max_norm)
     energy_min = 0.0  # uniform energy from 0 up to the boundary
 
+    # fixed RNG seed for reproducibility
+    rng = np.random.default_rng(46)
+
     betas_10 = sample_betas_energy_uniform(
         batch_size=1024,
         num_betas=num_betas,
         per_dim_clip=per_dim_clip,
         energy_max=energy_max,
         energy_min=energy_min,
+        rng=rng,
     )
 
     print(betas_10.shape)
+    print(betas_10[0])
