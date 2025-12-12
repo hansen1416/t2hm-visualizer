@@ -35,7 +35,7 @@ class BodyShapeGallery:
         )
         self.betas = torch.from_numpy(sampled).to(self.device)
 
-        self.page_size = 8
+        self.page_size = 32
         self.total_pages = int(batch_size / self.page_size)
 
         gui.Application.instance.initialize()
@@ -74,7 +74,7 @@ class BodyShapeGallery:
 
     def _add_ground(self):
         gp = get_checkerboard_plane(
-            plane_width=10, num_boxes=10, ground_level=0.0, up_axis=self.up_axis
+            plane_width=40, num_boxes=10, ground_level=0.0, up_axis=self.up_axis
         )
 
         for idx, g in enumerate(gp):
@@ -87,8 +87,8 @@ class BodyShapeGallery:
 
         center = [0, 0, 0]  # center of the ground plane
 
-        height = 2.0
-        far = 6.0
+        height = 8.0
+        far = 14.0
 
         if self.up_axis == "y":
             eye = [0, height, far]  # slightly above and behind
@@ -198,7 +198,7 @@ class BodyShapeGallery:
         min_y = -np.min(verts[:, :, 1])
         verts[:, :, 1] += min_y
 
-        cols = 4
+        cols = 8
         rows = math.ceil(B / cols)
         spacing = 2.5
         x_offset = (cols - 1) * spacing / 2
