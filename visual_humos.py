@@ -11,7 +11,7 @@ import open3d.visualization.rendering as rendering
 from smplx import SMPLX
 
 from utils.utils import get_checkerboard_plane
-from motion_paginator import AmassPager
+from humos_paginator import HumosPager
 
 
 class AnimPlayer:
@@ -42,11 +42,10 @@ class AnimPlayer:
             os.path.expanduser("~"),
             "repos",
             "humos",
-            "datasets",
-            "amass_data",
+            "debug_pred_un",
         )
         # load all the motion data paths
-        self.pager = AmassPager(
+        self.pager = HumosPager(
             dataset_root=dataset_folder,
             device=self.device,
         )
@@ -251,26 +250,23 @@ class AnimPlayer:
         self.label.text = motion_name
 
         motion_params = {
-            # "betas": self.motion_data["betas"],
-            "betas": self.motion_data["betas"]
-            .unsqueeze(0)
-            .repeat(self.motion_data["poses"].shape[0], 1),
+            "betas": self.motion_data["betas"],
             "transl": self.motion_data["trans"],
-            "global_orient": self.motion_data["poses"][:, :3],
-            "body_pose": self.motion_data["poses"][:, 3 : 63 + 3],
+            "global_orient": self.motion_data["root_orient_aa"],
+            "body_pose": self.motion_data["pose_body_aa"],
             "jaw_pose": torch.zeros(
-                (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
+                (self.motion_data["betas"].shape[0], 3), dtype=torch.float32
             ).to(self.device),
             "leye_pose": torch.zeros(
-                (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
+                (self.motion_data["betas"].shape[0], 3), dtype=torch.float32
             ).to(self.device),
             "reye_pose": torch.zeros(
-                (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
+                (self.motion_data["betas"].shape[0], 3), dtype=torch.float32
             ).to(self.device),
-            "left_hand_pose": self.motion_data["poses"][:, 66 : 66 + 45],
-            "right_hand_pose": self.motion_data["poses"][:, 66 + 45 : 66 + 45 + 45],
+            "left_hand_pose": self.motion_data["betas"][:, 66 : 66 + 45],
+            "right_hand_pose": self.motion_data["betas"][:, 66 + 45 : 66 + 45 + 45],
             "expression": torch.zeros(
-                (self.motion_data["poses"].shape[0], 10), dtype=torch.float32
+                (self.motion_data["betas"].shape[0], 10), dtype=torch.float32
             ).to(self.device),
         }
 
