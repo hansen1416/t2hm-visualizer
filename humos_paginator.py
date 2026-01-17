@@ -158,11 +158,11 @@ class HumosPager:
         path: str,
         *,
         keys: Optional[List[str]] = [
-            "trans",
             "betas",
             "gender",
-            "root_orient_aa",
-            "pose_body_aa",
+            "root_orient",
+            "pose_body",
+            "trans",
         ],
     ) -> Dict[str, Any]:
 
@@ -172,8 +172,6 @@ class HumosPager:
             path = f"{path}.{self.ext}"
 
         result = torch.load(path, map_location=self.device)
-
-        result = result["pred_un"]
 
         return result
 

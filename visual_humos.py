@@ -136,24 +136,37 @@ class AnimPlayer:
         # Move camera position manually
         self._scene.scene.camera.look_at(center, eye, up)
 
-    def _init_smpl(self):
+    def _init_smpl(self, gender: str = "male"):
         self._scene.scene.remove_geometry("__body_model__")
 
-        model_path = os.path.join("data", "body_models", "smplx")
+        # SMPLLayer internally looks up SMPL/SMPLH assets via its configured paths.
+        # HUMOS uses: SMPLLayer(model_type="smplh", gender=..., device=...)
+        self.smpl_model = SMPLLayer(
+            model_type="smplh",
+            gender=gender,
+            device=self.device,
+        )
 
-        self.smpl_model = SMPLX(
-            model_path,
-            gender="neutral",
-            use_pca=False,
-            # num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
-            num_expression_coeffs=10,  # for local motion json files
-            num_betas=10,
-        ).to(self.device)
+        # Faces for SMPLH topology (F,3)
+        faces = np.asarray(self.smpl_model.faces, dtype=np.int32)
 
-        faces = self.smpl_model.faces
+        # Create a neutral T-pose mesh (all-zero pose, trans, betas)
+        # SMPLH body joints count in HUMOS is 21 => 21*3 = 63 axis-angle dims
+        # Root orient is (3,), trans is (3,), betas is (10,)
+        zeros_body = np.zeros((1, 63), dtype=np.float32)
+        zeros_root = np.zeros((1, 3), dtype=np.float32)
+        zeros_trans = np.zeros((1, 3), dtype=np.float32)
+        zeros_betas = np.zeros((1, 10), dtype=np.float32)
 
-        model_output = self.smpl_model()
-        verts = model_output.vertices[0].detach().cpu().numpy()
+        # SMPLLayer forward returns (verts, joints)
+        # verts: (1, 6890, 3)
+        verts_torch, _ = self.smpl_model(
+            poses_body=torch.from_numpy(zeros_body).to(self.device),
+            poses_root=torch.from_numpy(zeros_root).to(self.device),
+            trans=torch.from_numpy(zeros_trans).to(self.device),
+            betas=torch.from_numpy(zeros_betas).to(self.device),
+        )
+        verts = verts_torch[0].detach().cpu().numpy()
 
         self.body_mesh = o3d.geometry.TriangleMesh()
 
@@ -162,12 +175,13 @@ class AnimPlayer:
         self.body_mesh.compute_vertex_normals()
         self.body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
 
+        # Floor alignment (same as your original)
         min_y = -self.body_mesh.get_min_bound()[1]
         self.body_mesh.translate([0, min_y, 0])
 
+        # Material and add to scene
         self.material = rendering.MaterialRecord()
         self.material.shader = "defaultLit"
-
         self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
     def _add_ui(self):
@@ -250,7 +264,12 @@ class AnimPlayer:
 
         self.play_animation = False
 
+        # 'betas', 'gender', 'root_orient', 'pose_body', 'trans'
         self.motion_data = self.pager.load_single(motion_name)
+
+        # for k, v in self.motion_data.items():
+        #     print(k)
+        #     print(v.shape)
 
         self.label.text = motion_name
 
@@ -259,8 +278,8 @@ class AnimPlayer:
         motion_params = {
             "betas": self.motion_data["betas"],
             "transl": self.motion_data["trans"],
-            "global_orient": self.motion_data["root_orient_aa"],
-            "body_pose": self.motion_data["pose_body_aa"],
+            "global_orient": self.motion_data["root_orient"],
+            "body_pose": self.motion_data["pose_body"],
             "jaw_pose": torch.zeros(
                 (num_frames, 3), dtype=torch.float32, device=self.device
             ),
@@ -291,14 +310,17 @@ class AnimPlayer:
             # skinning=skinning,
         )
 
-        # TODO: this has to be the same logic as humos. someling like self.bm_male = SMPLLayer(model_type="smplh", gender="male", device=device)
-        output = self.smpl_model.forward(
-            return_verts=True,
-            **motion_params,
-        )
-
-        self.verts_glob = output.vertices.cpu().numpy()
+        self.verts_glob = m_verts.cpu().numpy()
         self.frame_idx = 0
+
+        # # TODO: this has to be the same logic as humos. someling like self.bm_male = SMPLLayer(model_type="smplh", gender="male", device=device)
+        # output = self.smpl_model.forward(
+        #     return_verts=True,
+        #     **motion_params,
+        # )
+
+        # self.verts_glob = output.vertices.cpu().numpy()
+        # self.frame_idx = 0
 
         self.body_mesh.vertices = o3d.utility.Vector3dVector(
             self.verts_glob[self.frame_idx].copy()
