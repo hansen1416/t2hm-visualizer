@@ -249,12 +249,6 @@ class AnimPlayer:
 
         self.label.text = motion_name
 
-        print(self.motion_data["betas"].shape)
-        print(self.motion_data["trans"].shape)
-        print(self.motion_data["gender"].shape)
-        print(self.motion_data["root_orient_aa"].shape)
-        print(self.motion_data["pose_body_aa"].shape)
-
         num_frames = self.motion_data["betas"].shape[0]
 
         motion_params = {
@@ -281,7 +275,7 @@ class AnimPlayer:
                 (num_frames, 10), dtype=torch.float32, device=self.device
             ),
         }
-
+        # TODO: this has to be the same logic as humos. someling like self.bm_male = SMPLLayer(model_type="smplh", gender="male", device=device)
         output = self.smpl_model.forward(
             return_verts=True,
             **motion_params,
