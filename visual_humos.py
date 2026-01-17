@@ -1,8 +1,12 @@
 import os
 import time
 import threading
+import sys
+from pathlib import Path
 
-import cv2
+module_dir = Path("/home/hlz/repos/humos/aitviewer_humos").as_posix()
+sys.path.insert(0, module_dir)
+
 import torch
 import numpy as np
 import open3d as o3d
@@ -12,6 +16,7 @@ from smplx import SMPLX
 
 from utils.utils import get_checkerboard_plane
 from humos_paginator import HumosPager
+from third_party.aitviewer_humos.aitviewer.models.smpl import SMPLLayer
 
 
 class AnimPlayer:
@@ -275,6 +280,17 @@ class AnimPlayer:
                 (num_frames, 10), dtype=torch.float32, device=self.device
             ),
         }
+
+        bm_male = SMPLLayer(model_type="smplh", gender="male", device=self.device)
+
+        m_verts, m_joints = bm_male(
+            poses_body=motion_params["body_pose"],
+            betas=motion_params["betas"],
+            poses_root=motion_params["global_orient"],
+            trans=motion_params["transl"],
+            # skinning=skinning,
+        )
+
         # TODO: this has to be the same logic as humos. someling like self.bm_male = SMPLLayer(model_type="smplh", gender="male", device=device)
         output = self.smpl_model.forward(
             return_verts=True,
