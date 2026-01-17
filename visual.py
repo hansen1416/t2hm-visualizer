@@ -11,15 +11,12 @@ import open3d.visualization.rendering as rendering
 from smplx import SMPLX
 
 from utils.utils import get_checkerboard_plane
-from motion_dataloader import MotionDataLoader
+from motion_paginator import AmassPager
 
 
 class AnimPlayer:
 
     def __init__(self):
-
-        self.dataloader = MotionDataLoader()
-        self.category = self.dataloader.categories[0]
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -37,21 +34,35 @@ class AnimPlayer:
         self.window.add_child(self._scene)
 
         self.window.set_on_layout(self._on_layout)
+        # for AMASS use z-up, for motion-x use y-up
+        self.up_axis = "z"
+
+        # load the motion data before add ui and after init smpl
+        dataset_folder = os.path.join(
+            os.path.expanduser("~"),
+            "repos",
+            "humos",
+            "datasets",
+            "amass_data",
+        )
+        # load all the motion data paths
+        self.pager = AmassPager(
+            dataset_root=dataset_folder,
+            device=self.device,
+        )
 
         self._setup_lighting()
         self._add_ground()
         self._set_camera()
-
-        self._init_smpl()
-
         self._add_ui()
 
-        self.verts_glob = None
-        self.video_file = None
+        # load smpl model
+        self._init_smpl()
 
-        self.frame_idx = 0
-
-        self._play_animation = False
+        # load first page
+        fisrt_path = self._load_batch(0)
+        # load first motion
+        self._load_data(fisrt_path)
 
         # thread animation testing
         threading.Thread(target=self.animate_mesh, daemon=True).start()
@@ -84,7 +95,9 @@ class AnimPlayer:
         self._scene.scene.scene.enable_sun_light(True)
 
     def _add_ground(self):
-        gp = get_checkerboard_plane(plane_width=10, num_boxes=10, groun_level=-1.2)
+        gp = get_checkerboard_plane(
+            plane_width=10, num_boxes=10, ground_level=0.0, up_axis=self.up_axis
+        )
 
         for idx, g in enumerate(gp):
             g.compute_vertex_normals()
@@ -93,9 +106,23 @@ class AnimPlayer:
             )
 
     def _set_camera(self):
+
         center = [0, 0, 0]  # center of the ground plane
-        eye = [0, 1.0, 4.0]  # slightly above and behind
-        up = [0, 1, 0]
+
+        height = 2.0
+        far = 6.0
+
+        if self.up_axis == "y":
+            eye = [0, height, far]  # slightly above and behind
+            up = [0, 1, 0]
+        elif self.up_axis == "z":
+            eye = [0, far, height]  # slightly above and behind
+            up = [0, 0, 1]
+        elif self.up_axis == "x":
+            eye = [far, 0, height]  # slightly above and behind
+            up = [1, 0, 0]
+        else:
+            raise ValueError("up_axis must be one of {'x','y','z'}")
 
         bbox = o3d.geometry.AxisAlignedBoundingBox(
             min_bound=[-1, -1, -1], max_bound=[1, 1, 1]
@@ -116,6 +143,7 @@ class AnimPlayer:
             use_pca=False,
             # num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
             num_expression_coeffs=10,  # for local motion json files
+            num_betas=16,
         ).to(self.device)
 
         faces = self.smpl_model.faces
@@ -139,6 +167,9 @@ class AnimPlayer:
         self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
 
     def _add_ui(self):
+        """
+        Add page selection, motion selection and text description
+        """
         em = self.window.theme.font_size
 
         self._widget_layout = gui.Vert(
@@ -147,20 +178,20 @@ class AnimPlayer:
 
         # Category Selector
         self.category_combo = gui.Combobox()
-        categories = self.dataloader.categories
-        for c in categories:
-            self.category_combo.add_item(c)
-        self.category_combo.set_on_selection_changed(self._on_category_changed)
-        self._widget_layout.add_child(gui.Label("Select Category"))
-        self._widget_layout.add_child(self.category_combo)
 
         # Index Selector (1–500)
         self.index_combo = gui.Combobox()
-        for i in range(0, 500):
+
+        for i in range(1, self.pager.total_pages + 1):
             self.index_combo.add_item(str(i))
-        self.index_combo.set_on_selection_changed(self._on_index_changed)
-        self._widget_layout.add_child(gui.Label("Select Index"))
+
+        self.index_combo.set_on_selection_changed(self._on_page_changed)
+        self._widget_layout.add_child(gui.Label("Select Page"))
         self._widget_layout.add_child(self.index_combo)
+
+        self.category_combo.set_on_selection_changed(self._on_motion_changed)
+        self._widget_layout.add_child(gui.Label("Select Motion"))
+        self._widget_layout.add_child(self.category_combo)
 
         self.play_button = gui.Button("Pause")
         self.play_button.enabled = False
@@ -168,9 +199,6 @@ class AnimPlayer:
         self._widget_layout.add_child(self.play_button)
 
         self.window.add_child(self._widget_layout)
-
-        self._video_widget = gui.ImageWidget()
-        self.window.add_child(self._video_widget)
 
         # Create a horizontal layout to align the label to the left
         self.label_layout = gui.Horiz()
@@ -180,6 +208,7 @@ class AnimPlayer:
         self.window.add_child(self.label_layout)
 
     def _on_layout(self, layout_context):
+        """adjust the layout position"""
 
         r = self.window.content_rect
         self._scene.frame = r
@@ -191,52 +220,83 @@ class AnimPlayer:
             ).height,
         )
         self._widget_layout.frame = gui.Rect(r.get_right() - width, r.y, width, height)
+        # place the label at the bottom left
+        self.label_layout.frame = gui.Rect(0, r.height - 80, 700, 80)
 
-        self._video_widget.frame = gui.Rect(0, 0, 320, 240)  # x, y, width, height
+    def _load_batch(self, page_index: int):
+        """load motion path for give page"""
 
-        self.label_layout.frame = gui.Rect(1000, 900, 700, 80)
+        self.play_animation = False
+        self.frame_idx = 0
+        self.play_button.enabled = False
 
-    def _on_category_changed(self, value, _):
-        self.category = value
+        self.motion_batch = self.pager.get_names_by_page(page_index)
+
+        # do not forget to update motion selection
+        self.category_combo.clear_items()
+
+        # Add new motion names
+        for motion_name in self.motion_batch:
+            self.category_combo.add_item(motion_name)
+
+        return self.motion_batch[0]
+
+    def _load_data(self, motion_name: str):
+        """load motion data"""
+
+        self.play_animation = False
+
+        self.motion_data = self.pager.load_single(motion_name)
+
+        self.label.text = motion_name
+
+        motion_params = {
+            # "betas": self.motion_data["betas"],
+            "betas": self.motion_data["betas"]
+            .unsqueeze(0)
+            .repeat(self.motion_data["poses"].shape[0], 1),
+            "transl": self.motion_data["trans"],
+            "global_orient": self.motion_data["poses"][:, :3],
+            "body_pose": self.motion_data["poses"][:, 3 : 63 + 3],
+            "jaw_pose": torch.zeros(
+                (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
+            ).to(self.device),
+            "leye_pose": torch.zeros(
+                (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
+            ).to(self.device),
+            "reye_pose": torch.zeros(
+                (self.motion_data["poses"].shape[0], 3), dtype=torch.float32
+            ).to(self.device),
+            "left_hand_pose": self.motion_data["poses"][:, 66 : 66 + 45],
+            "right_hand_pose": self.motion_data["poses"][:, 66 + 45 : 66 + 45 + 45],
+            "expression": torch.zeros(
+                (self.motion_data["poses"].shape[0], 10), dtype=torch.float32
+            ).to(self.device),
+        }
+
+        output = self.smpl_model.forward(
+            return_verts=True,
+            **motion_params,
+        )
+
+        self.verts_glob = output.vertices.cpu().numpy()
+        self.frame_idx = 0
+
+        self.body_mesh.vertices = o3d.utility.Vector3dVector(
+            self.verts_glob[self.frame_idx].copy()
+        )
+
+        self._scene.scene.remove_geometry("__body_model__")
+        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+
+        self.frame_idx = 0
+        self.play_button.enabled = True
+
+    def _on_motion_changed(self, value, _):
 
         try:
 
-            # if False:
-
-            #     motion_params, self.video_file = self.dataloader.get_local_json(
-            #         0, self.category
-            #     )
-
-            #     # Get mesh vertices
-            #     output = self.smpl_model.forward(
-            #         betas=motion_params["betas"],
-            #         body_pose=motion_params["body_pose"],
-            #         global_orient=motion_params["global_orient"],
-            #         right_hand_pose=motion_params["right_hand_pose"],
-            #         left_hand_pose=motion_params["left_hand_pose"],
-            #         jaw_pose=motion_params["jaw_pose"],
-            #         leye_pose=motion_params["leye_pose"],
-            #         reye_pose=motion_params["reye_pose"],
-            #         expression=motion_params["expression"],
-            #     )
-
-            #     mesh_cam = output.vertices + motion_params["transl"][:, None, :]
-            #     self.verts_glob = mesh_cam.detach().cpu().numpy()
-
-            # else:
-
-            # # motion_params, self.video_file = self.dataloader.get(0, self.category)
-            # motion_params, self.video_file, text_label = (
-            #     self.dataloader.get_global_json(0, self.category)
-            # )
-
-            # # Get mesh vertices
-            # output = self.smpl_model.forward(return_verts=True, **motion_params)
-            # # [n, 10475, 3]
-            # self.verts_glob = output.vertices.cpu().numpy()
-
-            # self.label.text = text_label
-            pass
+            self._load_data(value)
 
         except Exception as e:
             msg = gui.Dialog("Error")
@@ -251,25 +311,11 @@ class AnimPlayer:
             print(e)
             return
 
-        # self.frame_idx = 0
-        # self.play_animation = True
-        # self.play_button.enabled = True  # disables
-
-    def _on_index_changed(self, value, _):
+    def _on_page_changed(self, value, _):
         try:
-            self.selected_index = int(value)
-            # print(f"Index selected: {self.selected_index}")
 
-            motion_params, self.video_file, text_label = (
-                self.dataloader.get_global_json(self.selected_index, self.category)
-            )
-
-            # Get mesh vertices
-            output = self.smpl_model.forward(return_verts=True, **motion_params)
-            # [n, 10475, 3]
-            self.verts_glob = output.vertices.cpu().numpy()
-
-            self.label.text = text_label
+            motion_path = self._load_batch(int(value) - 1)
+            self._load_data(motion_path)
 
         except Exception as e:
             self.selected_index = None
@@ -286,10 +332,6 @@ class AnimPlayer:
             print(e)
             return
 
-        self.frame_idx = 0
-        self.play_animation = True
-        self.play_button.enabled = True  # disables
-
     def _on_run_button_click(self):
 
         self.play_animation = not self.play_animation
@@ -302,36 +344,13 @@ class AnimPlayer:
                 time.sleep(0.1)
                 continue
 
-            cap = cv2.VideoCapture(self.video_file)
+            step = 1 / 60
 
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            step = 1 / fps
-
-            while cap.isOpened():
-                ret, frame = cap.read()
-
-                if not ret:
-                    cap.release()
-                    self.frame_idx = 0
-                    self.play_animation = False
-                    break
-
-                if self.frame_idx >= self.verts_glob.shape[0]:
-                    self.frame_idx = 0
-
-                # self.body_mesh.vertices = o3d.utility.Vector3dVector(
-                #     self.verts_glob[self.frame_idx]
-                # )
+            while self.frame_idx < self.verts_glob.shape[0] and self.play_animation:
 
                 verts = self.verts_glob[self.frame_idx].copy()
 
-                # verts[:, 1] *= -1  # Flip Y
-                # verts[:, 2] *= -1  # Flip Z
-
                 self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img_o3d = o3d.geometry.Image(frame)
 
                 # Schedule image update in the GUI thread
                 def update():
@@ -340,12 +359,13 @@ class AnimPlayer:
                         "__body_model__", self.body_mesh, self.material
                     )
 
-                    self._video_widget.update_image(img_o3d)
-
                 gui.Application.instance.post_to_main_thread(self.window, update)
 
                 self.frame_idx += 1
                 time.sleep(step)
+
+            if self.frame_idx >= self.verts_glob.shape[0]:
+                self.frame_idx = 0
 
     def run(self):
         gui.Application.instance.run()

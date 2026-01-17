@@ -143,8 +143,10 @@ for af in asset_file_names:
 _template_betas = torch.stack(template_betas, dim=0)
 
 motion_lib.load_motions(
-    skeleton_trees=[sk_tree], gender_betas=_template_betas.cpu(), random_sample=True
+    skeleton_trees=[sk_tree], gender_betas=_template_betas.cpu(), random_sample=False
 )
+
+print(motion_lib.motion_ids)
 
 # [num_envs]
 motion_ids = motion_lib.sample_motions(_template_betas.shape[0])
@@ -156,10 +158,11 @@ motion_res = motion_lib.get_motion_state(motion_ids, motion_times)
 # print(motion_res["key_pos"].shape)
 # print(motion_res["motion_bodies"].shape)
 # print(_template_betas.shape)
+print(motion_res.keys())
 
 
-template_betas = _template_betas.detach().to("cpu", torch.float32)  # [64, 10]
-motion_bodies = (
-    motion_res["motion_bodies"].detach().to("cpu", torch.float32)
-)  # [64, 10]
-key_pos = motion_res["key_pos"].detach().to("cpu", torch.float32)
+# template_betas = _template_betas.detach().to("cpu", torch.float32)  # [64, 10]
+# motion_bodies = (
+#     motion_res["motion_bodies"].detach().to("cpu", torch.float32)
+# )  # [64, 10]
+# key_pos = motion_res["key_pos"].detach().to("cpu", torch.float32)

@@ -39,7 +39,11 @@ class AnimPlayer:
 
         # load the motion data before add ui and after init smpl
         dataset_folder = os.path.join(
-            os.path.expanduser("~"), "datasets", "AMASS", "datasets"
+            os.path.expanduser("~"),
+            "repos",
+            "humos",
+            "datasets",
+            "amass_data",
         )
         # load all the motion data paths
         self.pager = AmassPager(
