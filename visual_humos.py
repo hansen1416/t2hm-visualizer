@@ -142,7 +142,7 @@ class AnimPlayer:
             use_pca=False,
             # num_expression_coeffs=50,  # for motion_generation *.npy files and global motion
             num_expression_coeffs=10,  # for local motion json files
-            num_betas=16,
+            num_betas=10,
         ).to(self.device)
 
         faces = self.smpl_model.faces
@@ -249,25 +249,37 @@ class AnimPlayer:
 
         self.label.text = motion_name
 
+        print(self.motion_data["betas"].shape)
+        print(self.motion_data["trans"].shape)
+        print(self.motion_data["gender"].shape)
+        print(self.motion_data["root_orient_aa"].shape)
+        print(self.motion_data["pose_body_aa"].shape)
+
+        num_frames = self.motion_data["betas"].shape[0]
+
         motion_params = {
             "betas": self.motion_data["betas"],
             "transl": self.motion_data["trans"],
             "global_orient": self.motion_data["root_orient_aa"],
             "body_pose": self.motion_data["pose_body_aa"],
             "jaw_pose": torch.zeros(
-                (self.motion_data["betas"].shape[0], 3), dtype=torch.float32
-            ).to(self.device),
+                (num_frames, 3), dtype=torch.float32, device=self.device
+            ),
             "leye_pose": torch.zeros(
-                (self.motion_data["betas"].shape[0], 3), dtype=torch.float32
-            ).to(self.device),
+                (num_frames, 3), dtype=torch.float32, device=self.device
+            ),
             "reye_pose": torch.zeros(
-                (self.motion_data["betas"].shape[0], 3), dtype=torch.float32
-            ).to(self.device),
-            "left_hand_pose": self.motion_data["betas"][:, 66 : 66 + 45],
-            "right_hand_pose": self.motion_data["betas"][:, 66 + 45 : 66 + 45 + 45],
+                (num_frames, 3), dtype=torch.float32, device=self.device
+            ),
+            "left_hand_pose": torch.zeros(
+                (num_frames, 45), dtype=torch.float32, device=self.device
+            ),
+            "right_hand_pose": torch.zeros(
+                (num_frames, 45), dtype=torch.float32, device=self.device
+            ),
             "expression": torch.zeros(
-                (self.motion_data["betas"].shape[0], 10), dtype=torch.float32
-            ).to(self.device),
+                (num_frames, 10), dtype=torch.float32, device=self.device
+            ),
         }
 
         output = self.smpl_model.forward(
