@@ -164,6 +164,7 @@ class HumosPager:
             "pose_body",
             "trans",
         ],
+        strict: bool = True,
     ) -> Dict[str, Any]:
 
         if not os.path.isabs(path):
@@ -171,7 +172,23 @@ class HumosPager:
         if not path.endswith(f".{self.ext}"):
             path = f"{path}.{self.ext}"
 
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
+
         result = torch.load(path, map_location=self.device)
+
+        if not isinstance(result, dict):
+            raise TypeError(
+                f"Expected a dict from torch.load(), got {type(result).__name__} from: {path}"
+            )
+
+        missing = [k for k in keys if k not in result]
+        if missing:
+            msg = f"Missing required keys {missing} in loaded file: {path}. Present keys: {list(result.keys())}"
+            if strict:
+                raise KeyError(msg)
+            else:
+                print(f"[warn] {msg}")
 
         return result
 
