@@ -55,12 +55,12 @@ class AnimPlayer:
             device=self.device,
         )
 
-        self.batch_size = 16
+        self.batch_size = 64
         self.verts_glob = [None] * self.batch_size
         self.offsets = [None] * self.batch_size
 
-        cols = 4
-        rows = 4
+        cols = 8
+        rows = 8
         spacing = 2.5
         x_offset = (cols - 1) * spacing / 2
         z_offset = (rows - 1) * spacing / 2
@@ -299,8 +299,8 @@ class AnimPlayer:
         # [64, 200, x]
         self.motion_data = self.pager.load_single(motion_name)
 
-        for k, v in self.motion_data.items():
-            self.motion_data[k] = v[:16, :, :]
+        # for k, v in self.motion_data.items():
+        #     self.motion_data[k] = v[:16, :, :]
 
         # for k, v in self.motion_data.items():
         #     print(k)
