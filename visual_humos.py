@@ -47,13 +47,15 @@ class AnimPlayer:
             os.path.expanduser("~"),
             "repos",
             "humos",
-            "debug_pred_un",
+            "output",
         )
         # load all the motion data paths
         self.pager = HumosPager(
             dataset_root=dataset_folder,
             device=self.device,
         )
+
+        self.batch_size = 64
 
         self._setup_lighting()
         self._add_ground()
@@ -63,13 +65,13 @@ class AnimPlayer:
         # load smpl model
         self._init_smpl()
 
-        # load first page
-        fisrt_path = self._load_batch(0)
-        # load first motion
-        self._load_data(fisrt_path)
+        # # load first page
+        # fisrt_path = self._load_batch(0)
+        # # load first motion
+        # self._load_data(fisrt_path)
 
-        # thread animation testing
-        threading.Thread(target=self.animate_mesh, daemon=True).start()
+        # # thread animation testing
+        # threading.Thread(target=self.animate_mesh, daemon=True).start()
 
     @property
     def play_animation(self):
@@ -168,21 +170,43 @@ class AnimPlayer:
         )
         verts = verts_torch[0].detach().cpu().numpy()
 
-        self.body_mesh = o3d.geometry.TriangleMesh()
-
-        self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
-        self.body_mesh.triangles = o3d.utility.Vector3iVector(faces)
-        self.body_mesh.compute_vertex_normals()
-        self.body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
-
-        # Floor alignment (same as your original)
-        min_y = -self.body_mesh.get_min_bound()[1]
-        self.body_mesh.translate([0, min_y, 0])
-
-        # Material and add to scene
         self.material = rendering.MaterialRecord()
         self.material.shader = "defaultLit"
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+
+        self.body_meshes = []
+
+        cols = 8
+        rows = 8
+        spacing = 2.5
+        x_offset = (cols - 1) * spacing / 2
+        z_offset = (rows - 1) * spacing / 2
+
+        for mesh_idx in range(self.batch_size):
+
+            row, col = divmod(mesh_idx, cols)
+            offset = np.array(
+                [
+                    col * spacing - x_offset,
+                    0,
+                    row * spacing - z_offset,
+                ]
+            )
+
+            mesh_verts = verts + offset
+
+            body_mesh = o3d.geometry.TriangleMesh()
+            body_mesh.vertices = o3d.utility.Vector3dVector(mesh_verts)
+            body_mesh.triangles = o3d.utility.Vector3iVector(faces)
+            body_mesh.compute_vertex_normals()
+            body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+
+            # Floor alignment (same as your original)
+            min_y = -body_mesh.get_min_bound()[1]
+            body_mesh.translate([0, min_y, 0])
+
+            name = f"__body_model_{mesh_idx}__"
+            self._scene.scene.add_geometry(name, body_mesh, self.material)
+            self.body_meshes.append(body_mesh)
 
     def _add_ui(self):
         """
