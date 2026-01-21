@@ -56,6 +56,7 @@ class AnimPlayer:
         )
 
         self.batch_size = 64
+        self.verts_glob = [None] * self.batch_size
 
         self._setup_lighting()
         self._add_ground()
@@ -65,13 +66,14 @@ class AnimPlayer:
         # load smpl model
         self._init_smpl()
 
-        # # load first page
-        # fisrt_path = self._load_batch(0)
+        # load first page
+        fisrt_path = self._load_batch(0)
+
         # # load first motion
-        # self._load_data(fisrt_path)
+        self._load_data(fisrt_path)
 
         # # thread animation testing
-        # threading.Thread(target=self.animate_mesh, daemon=True).start()
+        threading.Thread(target=self.animate_mesh, daemon=True).start()
 
     @property
     def play_animation(self):
@@ -289,6 +291,7 @@ class AnimPlayer:
         self.play_animation = False
 
         # 'betas', 'gender', 'root_orient', 'pose_body', 'trans'
+        # [64, 200, x]
         self.motion_data = self.pager.load_single(motion_name)
 
         # for k, v in self.motion_data.items():
@@ -297,63 +300,60 @@ class AnimPlayer:
 
         self.label.text = motion_name
 
-        num_frames = self.motion_data["betas"].shape[0]
-
-        motion_params = {
-            "betas": self.motion_data["betas"],
-            "transl": self.motion_data["trans"],
-            "global_orient": self.motion_data["root_orient"],
-            "body_pose": self.motion_data["pose_body"],
-            "jaw_pose": torch.zeros(
-                (num_frames, 3), dtype=torch.float32, device=self.device
-            ),
-            "leye_pose": torch.zeros(
-                (num_frames, 3), dtype=torch.float32, device=self.device
-            ),
-            "reye_pose": torch.zeros(
-                (num_frames, 3), dtype=torch.float32, device=self.device
-            ),
-            "left_hand_pose": torch.zeros(
-                (num_frames, 45), dtype=torch.float32, device=self.device
-            ),
-            "right_hand_pose": torch.zeros(
-                (num_frames, 45), dtype=torch.float32, device=self.device
-            ),
-            "expression": torch.zeros(
-                (num_frames, 10), dtype=torch.float32, device=self.device
-            ),
-        }
-
-        bm_male = SMPLLayer(model_type="smplh", gender="male", device=self.device)
-
-        m_verts, m_joints = bm_male(
-            poses_body=motion_params["body_pose"],
-            betas=motion_params["betas"],
-            poses_root=motion_params["global_orient"],
-            trans=motion_params["transl"],
-            # skinning=skinning,
-        )
-
-        self.verts_glob = m_verts.cpu().numpy()
-        self.frame_idx = 0
-
-        # # TODO: this has to be the same logic as humos. someling like self.bm_male = SMPLLayer(model_type="smplh", gender="male", device=device)
-        # output = self.smpl_model.forward(
-        #     return_verts=True,
-        #     **motion_params,
-        # )
-
-        # self.verts_glob = output.vertices.cpu().numpy()
-        # self.frame_idx = 0
-
-        self.body_mesh.vertices = o3d.utility.Vector3dVector(
-            self.verts_glob[self.frame_idx].copy()
-        )
-
-        self._scene.scene.remove_geometry("__body_model__")
-        self._scene.scene.add_geometry("__body_model__", self.body_mesh, self.material)
+        self.num_frames = self.motion_data["betas"].shape[1]
 
         self.frame_idx = 0
+
+        for mesh_idx in range(self.batch_size):
+
+            motion_params = {
+                "betas": self.motion_data["betas"][mesh_idx],
+                "transl": self.motion_data["trans"][mesh_idx],
+                "global_orient": self.motion_data["root_orient"][mesh_idx],
+                "body_pose": self.motion_data["pose_body"][mesh_idx],
+                "jaw_pose": torch.zeros(
+                    (self.num_frames, 3), dtype=torch.float32, device=self.device
+                ),
+                "leye_pose": torch.zeros(
+                    (self.num_frames, 3), dtype=torch.float32, device=self.device
+                ),
+                "reye_pose": torch.zeros(
+                    (self.num_frames, 3), dtype=torch.float32, device=self.device
+                ),
+                "left_hand_pose": torch.zeros(
+                    (self.num_frames, 45), dtype=torch.float32, device=self.device
+                ),
+                "right_hand_pose": torch.zeros(
+                    (self.num_frames, 45), dtype=torch.float32, device=self.device
+                ),
+                "expression": torch.zeros(
+                    (self.num_frames, 10), dtype=torch.float32, device=self.device
+                ),
+            }
+
+            bm_male = SMPLLayer(model_type="smplh", gender="male", device=self.device)
+
+            m_verts, m_joints = bm_male(
+                poses_body=motion_params["body_pose"],
+                betas=motion_params["betas"],
+                poses_root=motion_params["global_orient"],
+                trans=motion_params["transl"],
+                # skinning=skinning,
+            )
+
+            self.verts_glob[mesh_idx] = m_verts.cpu().numpy()
+
+            self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
+                self.verts_glob[mesh_idx][self.frame_idx].copy()
+            )
+
+            name = f"__body_model_{mesh_idx}__"
+
+            self._scene.scene.remove_geometry(name)
+            self._scene.scene.add_geometry(
+                name, self.body_meshes[mesh_idx], self.material
+            )
+
         self.play_button.enabled = True
 
     def _on_motion_changed(self, value, _):
@@ -410,26 +410,31 @@ class AnimPlayer:
 
             step = 1 / 60
 
-            while self.frame_idx < self.verts_glob.shape[0] and self.play_animation:
+            while self.frame_idx < self.num_frames and self.play_animation:
 
-                verts = self.verts_glob[self.frame_idx].copy()
+                for mesh_idx in range(self.batch_size):
 
-                self.body_mesh.vertices = o3d.utility.Vector3dVector(verts)
+                    verts = self.verts_glob[mesh_idx][self.frame_idx].copy()
 
-                # Schedule image update in the GUI thread
-                def update():
-                    self._scene.scene.remove_geometry("__body_model__")
-                    self._scene.scene.add_geometry(
-                        "__body_model__", self.body_mesh, self.material
+                    self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
+                        verts
                     )
 
-                gui.Application.instance.post_to_main_thread(self.window, update)
+                    # Schedule image update in the GUI thread
+                    def update():
+                        name = f"__body_model_{mesh_idx}__"
+                        self._scene.scene.remove_geometry(name)
+                        self._scene.scene.add_geometry(
+                            name, self.body_meshes[mesh_idx], self.material
+                        )
+
+                    gui.Application.instance.post_to_main_thread(self.window, update)
 
                 self.frame_idx += 1
                 time.sleep(step)
 
-            if self.frame_idx >= self.verts_glob.shape[0]:
-                self.frame_idx = 0
+                if self.frame_idx >= self.num_frames:
+                    self.frame_idx = 0
 
     def run(self):
         gui.Application.instance.run()
