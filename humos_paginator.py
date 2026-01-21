@@ -182,8 +182,6 @@ class HumosPager:
                 f"Expected a dict from torch.load(), got {type(result).__name__} from: {path}"
             )
 
-        # result = {k: v[0] for k, v in result.items()}
-
         missing = [k for k in keys if k not in result]
         if missing:
             msg = f"Missing required keys {missing} in loaded file: {path}. Present keys: {list(result.keys())}"

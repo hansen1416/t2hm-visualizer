@@ -55,12 +55,12 @@ class AnimPlayer:
             device=self.device,
         )
 
-        self.batch_size = 64
+        self.batch_size = 4
         self.verts_glob = [None] * self.batch_size
         self.offsets = [None] * self.batch_size
 
-        cols = 8
-        rows = 8
+        cols = 2
+        rows = 2
         spacing = 2.5
         x_offset = (cols - 1) * spacing / 2
         z_offset = (rows - 1) * spacing / 2
@@ -71,8 +71,8 @@ class AnimPlayer:
             offset = np.array(
                 [
                     col * spacing - x_offset,
-                    0,
                     row * spacing - z_offset,
+                    0,
                 ]
             )
 
@@ -299,6 +299,9 @@ class AnimPlayer:
         # [64, 200, x]
         self.motion_data = self.pager.load_single(motion_name)
 
+        for k, v in self.motion_data.items():
+            self.motion_data[k] = v[:4, :, :]
+
         # for k, v in self.motion_data.items():
         #     print(k)
         #     print(v.shape)
@@ -413,7 +416,7 @@ class AnimPlayer:
                 time.sleep(0.1)
                 continue
 
-            step = 1 / 6
+            step = 1 / 60
 
             while self.frame_idx < self.num_frames and self.play_animation:
 
