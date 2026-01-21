@@ -413,7 +413,7 @@ class AnimPlayer:
                 time.sleep(0.1)
                 continue
 
-            step = 1 / 60
+            step = 1 / 6
 
             while self.frame_idx < self.num_frames and self.play_animation:
 
