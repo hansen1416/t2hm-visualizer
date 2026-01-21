@@ -57,6 +57,26 @@ class AnimPlayer:
 
         self.batch_size = 64
         self.verts_glob = [None] * self.batch_size
+        self.offsets = [None] * self.batch_size
+
+        cols = 8
+        rows = 8
+        spacing = 2.5
+        x_offset = (cols - 1) * spacing / 2
+        z_offset = (rows - 1) * spacing / 2
+
+        for mesh_idx in range(self.batch_size):
+
+            row, col = divmod(mesh_idx, cols)
+            offset = np.array(
+                [
+                    col * spacing - x_offset,
+                    0,
+                    row * spacing - z_offset,
+                ]
+            )
+
+            self.offsets[mesh_idx] = offset
 
         self._setup_lighting()
         self._add_ground()
@@ -177,24 +197,9 @@ class AnimPlayer:
 
         self.body_meshes = []
 
-        cols = 8
-        rows = 8
-        spacing = 2.5
-        x_offset = (cols - 1) * spacing / 2
-        z_offset = (rows - 1) * spacing / 2
-
         for mesh_idx in range(self.batch_size):
 
-            row, col = divmod(mesh_idx, cols)
-            offset = np.array(
-                [
-                    col * spacing - x_offset,
-                    0,
-                    row * spacing - z_offset,
-                ]
-            )
-
-            mesh_verts = verts + offset
+            mesh_verts = verts + self.offsets[mesh_idx]
 
             body_mesh = o3d.geometry.TriangleMesh()
             body_mesh.vertices = o3d.utility.Vector3dVector(mesh_verts)
@@ -341,7 +346,7 @@ class AnimPlayer:
                 # skinning=skinning,
             )
 
-            self.verts_glob[mesh_idx] = m_verts.cpu().numpy()
+            self.verts_glob[mesh_idx] = m_verts.cpu().numpy() + self.offsets[mesh_idx]
 
             self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
                 self.verts_glob[mesh_idx][self.frame_idx].copy()
