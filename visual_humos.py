@@ -55,12 +55,12 @@ class AnimPlayer:
             device=self.device,
         )
 
-        self.batch_size = 4
+        self.batch_size = 16
         self.verts_glob = [None] * self.batch_size
         self.offsets = [None] * self.batch_size
 
-        cols = 2
-        rows = 2
+        cols = 4
+        rows = 4
         spacing = 2.5
         x_offset = (cols - 1) * spacing / 2
         z_offset = (rows - 1) * spacing / 2
@@ -300,7 +300,7 @@ class AnimPlayer:
         self.motion_data = self.pager.load_single(motion_name)
 
         for k, v in self.motion_data.items():
-            self.motion_data[k] = v[:4, :, :]
+            self.motion_data[k] = v[:16, :, :]
 
         # for k, v in self.motion_data.items():
         #     print(k)
@@ -410,39 +410,66 @@ class AnimPlayer:
 
     def animate_mesh(self):
 
+        step = 1 / 60
+
         while True:
 
             if not self.play_animation:
                 time.sleep(0.1)
                 continue
 
-            step = 1 / 60
+            # snapshot frame index in the worker thread
+            frame_idx = self.frame_idx
 
-            while self.frame_idx < self.num_frames and self.play_animation:
+            # freeze per-mesh vertex arrays for this frame (no Open3D calls here)
+            verts_frame = [
+                self.verts_glob[i][frame_idx].copy() for i in range(self.batch_size)
+            ]
 
-                for mesh_idx in range(self.batch_size):
-
-                    verts = self.verts_glob[mesh_idx][self.frame_idx].copy()
-
-                    self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
-                        verts
+            def update(verts_frame=verts_frame):
+                # UI thread ONLY: touch Open3D objects here
+                for i in range(self.batch_size):
+                    self.body_meshes[i].vertices = o3d.utility.Vector3dVector(
+                        verts_frame[i]
                     )
 
-                    # Schedule image update in the GUI thread
-                    def update():
-                        name = f"__body_model_{mesh_idx}__"
-                        self._scene.scene.remove_geometry(name)
-                        self._scene.scene.add_geometry(
-                            name, self.body_meshes[mesh_idx], self.material
-                        )
+                    name = f"__body_model_{i}__"
+                    self._scene.scene.remove_geometry(name)
+                    self._scene.scene.add_geometry(
+                        name, self.body_meshes[i], self.material
+                    )
 
-                    gui.Application.instance.post_to_main_thread(self.window, update)
+            gui.Application.instance.post_to_main_thread(self.window, update)
 
-                self.frame_idx += 1
-                time.sleep(step)
+            # advance frame index (worker thread state only)
+            self.frame_idx = (frame_idx + 1) % self.num_frames
+            time.sleep(step)
 
-                if self.frame_idx >= self.num_frames:
-                    self.frame_idx = 0
+            # while self.frame_idx < self.num_frames and self.play_animation:
+
+            #     for mesh_idx in range(self.batch_size):
+
+            #         verts = self.verts_glob[mesh_idx][self.frame_idx].copy()
+
+            #         self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
+            #             verts
+            #         )
+
+            #         # Schedule image update in the GUI thread
+            #         def update():
+            #             name = f"__body_model_{mesh_idx}__"
+            #             self._scene.scene.remove_geometry(name)
+            #             self._scene.scene.add_geometry(
+            #                 name, self.body_meshes[mesh_idx], self.material
+            #             )
+
+            #         gui.Application.instance.post_to_main_thread(self.window, update)
+
+            #     self.frame_idx += 1
+            #     time.sleep(step)
+
+            #     if self.frame_idx >= self.num_frames:
+            #         self.frame_idx = 0
 
     def run(self):
         gui.Application.instance.run()
