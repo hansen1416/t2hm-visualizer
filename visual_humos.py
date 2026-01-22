@@ -124,7 +124,7 @@ class AnimPlayer:
 
     def _add_ground(self):
         gp = get_checkerboard_plane(
-            plane_width=10, num_boxes=10, ground_level=0.0, up_axis=self.up_axis
+            plane_width=20, num_boxes=20, ground_level=0.0, up_axis=self.up_axis
         )
 
         for idx, g in enumerate(gp):
@@ -138,7 +138,7 @@ class AnimPlayer:
         center = [0, 0, 0]  # center of the ground plane
 
         height = 2.0
-        far = 6.0
+        far = 14.0
 
         if self.up_axis == "y":
             eye = [0, height, far]  # slightly above and behind
@@ -208,8 +208,8 @@ class AnimPlayer:
             body_mesh.paint_uniform_color([0.5, 0.5, 0.5])
 
             # Floor alignment (same as your original)
-            min_y = -body_mesh.get_min_bound()[1]
-            body_mesh.translate([0, min_y, 0])
+            # min_y = -body_mesh.get_min_bound()[1]
+            # body_mesh.translate([0, min_y, 0])
 
             name = f"__body_model_{mesh_idx}__"
             self._scene.scene.add_geometry(name, body_mesh, self.material)
