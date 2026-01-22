@@ -144,7 +144,7 @@ class AnimPlayer:
             eye = [0, height, far]  # slightly above and behind
             up = [0, 1, 0]
         elif self.up_axis == "z":
-            eye = [0, far, height]  # slightly above and behind
+            eye = [0, -far, height]  # slightly above and behind
             up = [0, 0, 1]
         elif self.up_axis == "x":
             eye = [far, 0, height]  # slightly above and behind
