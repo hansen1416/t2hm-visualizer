@@ -2,7 +2,7 @@ import os
 import math
 import random
 from glob import glob
-from typing import List, Dict, Any, Iterable, Optional, Union
+from typing import List, Dict, Any, Iterable, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -163,9 +163,10 @@ class HumosPager:
             "root_orient",
             "pose_body",
             "trans",
+            "text",
         ],
         strict: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> Tuple[Dict[str, Any], str]:
 
         if not os.path.isabs(path):
             path = os.path.join(self.root, path)
@@ -182,7 +183,15 @@ class HumosPager:
                 f"Expected a dict from torch.load(), got {type(result).__name__} from: {path}"
             )
 
-        missing = [k for k in keys if k not in result]
+        motion_keys: Optional[List[str]] = [
+            "betas",
+            "gender",
+            "root_orient",
+            "pose_body",
+            "trans",
+        ]
+
+        missing = [k for k in motion_keys if k not in result]
         if missing:
             msg = f"Missing required keys {missing} in loaded file: {path}. Present keys: {list(result.keys())}"
             if strict:
@@ -190,7 +199,9 @@ class HumosPager:
             else:
                 print(f"[warn] {msg}")
 
-        return result
+        motion_data = {k: v for k, v in result.items() if k in motion_keys}
+
+        return motion_data, result["text"]
 
 
 # ---------------- example usage ----------------

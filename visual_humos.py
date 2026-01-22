@@ -297,7 +297,7 @@ class AnimPlayer:
 
         # 'betas', 'gender', 'root_orient', 'pose_body', 'trans'
         # [64, 200, x]
-        self.motion_data = self.pager.load_single(motion_name)
+        self.motion_data, text = self.pager.load_single(motion_name)
 
         # for k, v in self.motion_data.items():
         #     self.motion_data[k] = v[:16, :, :]
@@ -306,7 +306,7 @@ class AnimPlayer:
         #     print(k)
         #     print(v.shape)
 
-        self.label.text = motion_name
+        self.label.text = text[0]
 
         self.num_frames = self.motion_data["betas"].shape[1]
 
