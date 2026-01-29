@@ -56,8 +56,12 @@ def apply_static_ground_offset(
     ), f"Expected (T,V,3), got {verts.shape}"
 
     h0_min = verts[0, :, up_axis_idx].amin()  # tensor scalar
-    margin = verts.new_tensor(safety_margin)  # tensor scalar, same dtype/device
-    offset = (-h0_min + margin).clamp_min(0.0)  # tensor scalar >= 0
+
+    ground_level = 0.0
+
+    target = verts.new_tensor(ground_level + safety_margin)
+
+    offset = target - h0_min
 
     # adjust the humanoid height
     verts[..., up_axis_idx].add_(offset)
