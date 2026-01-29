@@ -64,6 +64,32 @@ def apply_static_ground_offset(
     return offset
 
 
+def gender_from_motion_name(motion_name: str) -> str:
+    """
+    motion_name examples:
+      "000002_-1" -> female
+      "000002_0"  -> neutral
+      "000002_1"  -> male
+    Also accepts suffixes like "_male", "_female", "_neutral".
+    """
+    base = os.path.basename(motion_name)
+    base = os.path.splitext(base)[0]
+    tag = base.rsplit("_", 1)[-1] if "_" in base else ""
+
+    m = {
+        "-1": "female",
+        "0": "neutral",
+        "1": "male",
+        "f": "female",
+        "female": "female",
+        "n": "neutral",
+        "neutral": "neutral",
+        "m": "male",
+        "male": "male",
+    }
+    return m.get(tag.lower(), "male")  # safe default
+
+
 class AnimPlayer:
 
     def __init__(self):
@@ -342,14 +368,24 @@ class AnimPlayer:
 
         # 'betas', 'gender', 'root_orient', 'pose_body', 'trans'
         # [64, 200, x]
+        # motion_name are like # 000002_-1; # 000002_0; # 000002_1
         self.motion_data, text = self.pager.load_single(motion_name)
 
-        # for k, v in self.motion_data.items():
-        #     self.motion_data[k] = v[:16, :, :]
+        # decide gender from motion name
+        gender = gender_from_motion_name(motion_name)
 
-        # for k, v in self.motion_data.items():
-        #     print(k)
-        #     print(v.shape)
+        # cache SMPLLayer per gender (avoid re-creating it 64x per load)
+        if not hasattr(self, "_smplh_cache"):
+            self._smplh_cache = {}
+
+        if gender not in self._smplh_cache:
+            self._smplh_cache[gender] = SMPLLayer(
+                model_type="smplh", gender=gender, device=self.device
+            )
+
+        bm = self._smplh_cache[gender]
+
+        print(f"load SMPLLayer with gender {gender}")
 
         self.label.text = text[0]
 
@@ -384,14 +420,11 @@ class AnimPlayer:
                 ),
             }
 
-            bm_male = SMPLLayer(model_type="smplh", gender="male", device=self.device)
-
-            m_verts, m_joints = bm_male(
+            m_verts, m_joints = bm(
                 poses_body=motion_params["body_pose"],
                 betas=motion_params["betas"],
                 poses_root=motion_params["global_orient"],
                 trans=motion_params["transl"],
-                # skinning=skinning,
             )
 
             self.verts_glob[mesh_idx] = m_verts.cpu().numpy() + self.offsets[mesh_idx]
