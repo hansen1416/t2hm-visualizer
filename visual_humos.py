@@ -18,6 +18,51 @@ from utils.utils import get_checkerboard_plane
 from humos_paginator import HumosPager
 from third_party.aitviewer_humos.aitviewer.models.smpl import SMPLLayer
 
+from typing import Iterable, Optional
+
+# SMPL/SMPL-H foot landmarks (0-indexed) used in the HUMOS grounding note
+DEFAULT_FOOT_VIDS = (3387, 6787, 3216, 6617, 3226, 6624)
+
+
+def apply_static_ground_offset(
+    verts: torch.Tensor,
+    up_axis: int = 2,  # 2 for Z-up, 1 for Y-up
+    safety_margin: float = 0.0,  # e.g., 0.002 for 2mm
+) -> torch.Tensor:
+    """
+    Static grounding: compute offset from first frame only and shift verts for all frames.
+
+    Args:
+        verts: (T, V, 3) vertices in world coordinates (i.e., after applying translation).
+        up_axis: which axis is "height" (Z-up=2, Y-up=1).
+        safety_margin: small positive margin to avoid initial penetration.
+
+    Returns:
+        offset: scalar tensor (same dtype/device as verts), >= 0.
+    """
+    # Ensure torch tensor (torch.as_tensor shares memory with numpy on CPU)
+    if not torch.is_tensor(verts):
+        verts = torch.as_tensor(verts)
+
+    if up_axis == "y":
+        up_axis_idx = 1
+    elif up_axis == "z":
+        up_axis_idx = 2
+    elif up_axis == "x":
+        up_axis_idx = 0
+
+    assert (
+        verts.ndim == 3 and verts.shape[-1] == 3
+    ), f"Expected (T,V,3), got {verts.shape}"
+
+    h0_min = verts[0, :, up_axis_idx].amin()  # tensor scalar
+    margin = verts.new_tensor(safety_margin)  # tensor scalar, same dtype/device
+    offset = (-h0_min + margin).clamp_min(0.0)  # tensor scalar >= 0
+
+    # adjust the humanoid height
+    verts[..., up_axis_idx].add_(offset)
+    return offset
+
 
 class AnimPlayer:
 
@@ -350,6 +395,12 @@ class AnimPlayer:
             )
 
             self.verts_glob[mesh_idx] = m_verts.cpu().numpy() + self.offsets[mesh_idx]
+
+            apply_static_ground_offset(
+                self.verts_glob[mesh_idx],
+                up_axis=self.up_axis,
+                safety_margin=0.002,
+            )
 
             self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
                 self.verts_glob[mesh_idx][self.frame_idx].copy()
