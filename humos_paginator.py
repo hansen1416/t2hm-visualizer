@@ -166,7 +166,7 @@ class HumosPager:
             "text",
         ],
         strict: bool = True,
-    ) -> Tuple[Dict[str, Any], str]:
+    ) -> Tuple[Dict[str, Any], str, List]:
 
         if not os.path.isabs(path):
             path = os.path.join(self.root, path)
@@ -201,7 +201,7 @@ class HumosPager:
 
         motion_data = {k: v for k, v in result.items() if k in motion_keys}
 
-        return motion_data, result["text"]
+        return motion_data, result["text"], result["offset_height"]
 
 
 # ---------------- example usage ----------------
