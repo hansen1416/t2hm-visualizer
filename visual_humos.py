@@ -107,6 +107,10 @@ class AnimPlayer:
 
             self.offsets[mesh_idx] = offset
 
+        # --- in AnimPlayer.__init__ (add near other state init, before self._add_ui()) ---
+        self.selected_gender = "male"
+        self.current_page_idx = 0
+
         self._setup_lighting()
         self._add_ground()
         self._set_camera()
@@ -263,6 +267,15 @@ class AnimPlayer:
         for i in range(1, self.pager.total_pages + 1):
             self.index_combo.add_item(str(i))
 
+        # --- in AnimPlayer._add_ui() (NEW: add before "Select Page") ---
+        self.gender_combo = gui.Combobox()
+        for g in ["male", "neutral", "female"]:
+            self.gender_combo.add_item(g)
+        self.gender_combo.set_on_selection_changed(self._on_gender_changed)
+
+        self._widget_layout.add_child(gui.Label("Select Gender"))
+        self._widget_layout.add_child(self.gender_combo)
+
         self.index_combo.set_on_selection_changed(self._on_page_changed)
         self._widget_layout.add_child(gui.Label("Select Page"))
         self._widget_layout.add_child(self.index_combo)
@@ -308,6 +321,8 @@ class AnimPlayer:
         self.frame_idx = 0
         self.play_button.enabled = False
 
+        self.current_page_idx = page_index
+
         self.motion_batch = self.pager.get_names_by_page(page_index)
 
         # do not forget to update motion selection
@@ -324,13 +339,15 @@ class AnimPlayer:
 
         self.play_animation = False
 
+        # decide gender from dropdown (fallback to parsing name)
+        gender = self.selected_gender
+
         # 'betas', 'gender', 'root_orient', 'pose_body', 'trans'
         # [64, 200, x]
         # motion_name are like # 000002_-1; # 000002_0; # 000002_1
-        self.motion_data, text, offset_height = self.pager.load_single(motion_name)
-
-        # decide gender from motion name
-        gender = gender_from_motion_name(motion_name)
+        self.motion_data, text, offset_height = self.pager.load_single(
+            motion_name, gender=gender
+        )
 
         # cache SMPLLayer per gender (avoid re-creating it 64x per load)
         if not hasattr(self, "_smplh_cache"):
@@ -412,6 +429,11 @@ class AnimPlayer:
 
         self.play_button.enabled = True
 
+    def _on_gender_changed(self, value, _):
+        self.selected_gender = value
+        motion_path = self._load_batch(self.current_page_idx)
+        self._load_data(motion_path)
+
     def _on_motion_changed(self, value, _):
 
         try:
@@ -434,7 +456,10 @@ class AnimPlayer:
     def _on_page_changed(self, value, _):
         try:
 
-            motion_path = self._load_batch(int(value) - 1)
+            # motion_path = self._load_batch(int(value) - 1)
+            # self._load_data(motion_path)
+            page_idx = int(value) - 1
+            motion_path = self._load_batch(page_idx)
             self._load_data(motion_path)
 
         except Exception as e:
@@ -492,32 +517,6 @@ class AnimPlayer:
             # advance frame index (worker thread state only)
             self.frame_idx = (frame_idx + 1) % self.num_frames
             time.sleep(step)
-
-            # while self.frame_idx < self.num_frames and self.play_animation:
-
-            #     for mesh_idx in range(self.batch_size):
-
-            #         verts = self.verts_glob[mesh_idx][self.frame_idx].copy()
-
-            #         self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
-            #             verts
-            #         )
-
-            #         # Schedule image update in the GUI thread
-            #         def update():
-            #             name = f"__body_model_{mesh_idx}__"
-            #             self._scene.scene.remove_geometry(name)
-            #             self._scene.scene.add_geometry(
-            #                 name, self.body_meshes[mesh_idx], self.material
-            #             )
-
-            #         gui.Application.instance.post_to_main_thread(self.window, update)
-
-            #     self.frame_idx += 1
-            #     time.sleep(step)
-
-            #     if self.frame_idx >= self.num_frames:
-            #         self.frame_idx = 0
 
     def run(self):
         gui.Application.instance.run()
