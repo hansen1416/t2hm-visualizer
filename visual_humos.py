@@ -199,7 +199,8 @@ class AnimPlayer:
         # SMPLLayer internally looks up SMPL/SMPLH assets via its configured paths.
         # HUMOS uses: SMPLLayer(model_type="smplh", gender=..., device=...)
         self.smpl_model = SMPLLayer(
-            model_type="smplh",
+            # model_type="smplh",
+            model_type="smpl",
             gender=gender,
             device=self.device,
         )
@@ -210,7 +211,7 @@ class AnimPlayer:
         # Create a neutral T-pose mesh (all-zero pose, trans, betas)
         # SMPLH body joints count in HUMOS is 21 => 21*3 = 63 axis-angle dims
         # Root orient is (3,), trans is (3,), betas is (10,)
-        zeros_body = np.zeros((1, 63), dtype=np.float32)
+        zeros_body = np.zeros((1, 69), dtype=np.float32)
         zeros_root = np.zeros((1, 3), dtype=np.float32)
         zeros_trans = np.zeros((1, 3), dtype=np.float32)
         zeros_betas = np.zeros((1, 10), dtype=np.float32)
@@ -355,7 +356,7 @@ class AnimPlayer:
 
         if gender not in self._smplh_cache:
             self._smplh_cache[gender] = SMPLLayer(
-                model_type="smplh", gender=gender, device=self.device
+                model_type="smpl", gender=gender, device=self.device
             )
 
         bm = self._smplh_cache[gender]
@@ -370,36 +371,16 @@ class AnimPlayer:
 
         for mesh_idx in range(self.batch_size):
 
-            motion_params = {
-                "betas": self.motion_data["betas"][mesh_idx],
-                "transl": self.motion_data["trans"][mesh_idx],
-                "global_orient": self.motion_data["root_orient"][mesh_idx],
-                "body_pose": self.motion_data["pose_body"][mesh_idx],
-                "jaw_pose": torch.zeros(
-                    (self.num_frames, 3), dtype=torch.float32, device=self.device
-                ),
-                "leye_pose": torch.zeros(
-                    (self.num_frames, 3), dtype=torch.float32, device=self.device
-                ),
-                "reye_pose": torch.zeros(
-                    (self.num_frames, 3), dtype=torch.float32, device=self.device
-                ),
-                "left_hand_pose": torch.zeros(
-                    (self.num_frames, 45), dtype=torch.float32, device=self.device
-                ),
-                "right_hand_pose": torch.zeros(
-                    (self.num_frames, 45), dtype=torch.float32, device=self.device
-                ),
-                "expression": torch.zeros(
-                    (self.num_frames, 10), dtype=torch.float32, device=self.device
-                ),
-            }
+            betas = self.motion_data["betas"][mesh_idx]
+            transl = self.motion_data["trans"][mesh_idx]
+            global_orient = self.motion_data["root_orient"][mesh_idx]
+            body_pose = self.motion_data["pose_body"][mesh_idx]
 
             m_verts, m_joints = bm(
-                poses_body=motion_params["body_pose"],
-                betas=motion_params["betas"],
-                poses_root=motion_params["global_orient"],
-                trans=motion_params["transl"],
+                poses_body=body_pose.reshape(body_pose.shape[0], -1),
+                betas=betas,
+                poses_root=global_orient,
+                trans=transl,
             )
 
             self.verts_glob[mesh_idx] = m_verts.cpu().numpy() + self.offsets[mesh_idx]
