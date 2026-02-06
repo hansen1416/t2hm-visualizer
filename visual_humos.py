@@ -71,7 +71,7 @@ class AnimPlayer:
         self.up_axis = "z"
         self.up_axis_idx = 2
 
-        self.smpl_type = "smplh"
+        self.smpl_type = "smpl"
 
         # load the motion data before add ui and after init smpl
         dataset_folder = os.path.join(
