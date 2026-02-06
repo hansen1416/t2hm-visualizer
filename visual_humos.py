@@ -71,6 +71,8 @@ class AnimPlayer:
         self.up_axis = "z"
         self.up_axis_idx = 2
 
+        self.smpl_type = "smplh"
+
         # load the motion data before add ui and after init smpl
         dataset_folder = os.path.join(
             os.path.expanduser("~"),
@@ -199,8 +201,7 @@ class AnimPlayer:
         # SMPLLayer internally looks up SMPL/SMPLH assets via its configured paths.
         # HUMOS uses: SMPLLayer(model_type="smplh", gender=..., device=...)
         self.smpl_model = SMPLLayer(
-            # model_type="smplh",
-            model_type="smpl",
+            model_type=self.smpl_type,
             gender=gender,
             device=self.device,
         )
@@ -211,7 +212,10 @@ class AnimPlayer:
         # Create a neutral T-pose mesh (all-zero pose, trans, betas)
         # SMPLH body joints count in HUMOS is 21 => 21*3 = 63 axis-angle dims
         # Root orient is (3,), trans is (3,), betas is (10,)
-        zeros_body = np.zeros((1, 69), dtype=np.float32)
+
+        zeros_body_size = 63 if self.smpl_type == "smplh" else 69
+
+        zeros_body = np.zeros((1, zeros_body_size), dtype=np.float32)
         zeros_root = np.zeros((1, 3), dtype=np.float32)
         zeros_trans = np.zeros((1, 3), dtype=np.float32)
         zeros_betas = np.zeros((1, 10), dtype=np.float32)
@@ -356,7 +360,7 @@ class AnimPlayer:
 
         if gender not in self._smplh_cache:
             self._smplh_cache[gender] = SMPLLayer(
-                model_type="smpl", gender=gender, device=self.device
+                model_type=self.smpl_type, gender=gender, device=self.device
             )
 
         bm = self._smplh_cache[gender]
