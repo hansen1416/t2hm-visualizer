@@ -2,20 +2,31 @@ import os
 import math
 import random
 from glob import glob
+import joblib
 from typing import List, Dict, Any, Iterable, Optional, Union
 
 import numpy as np
 import torch
 
 
-class AmassPager:
+def _to_tensor(v: Any, device) -> torch.Tensor:
+    if torch.is_tensor(v):
+        return v.to(device, dtype=torch.float32)
+    if isinstance(v, np.ndarray):
+        t = torch.from_numpy(v)
+        return t.to(device, dtype=torch.float32)
+    t = torch.tensor(v)
+    return t.to(device, dtype=torch.float32)
+
+
+class PHCPager:
     """
-    Paginate AMASS .npz files with optional (lazy/eager) loading.
+    Paginate PHC .pkl files with optional (lazy/eager) loading.
 
     Parameters
     ----------
     root : str
-        Root directory that contains AMASS .npz files (searched recursively).
+        Root directory that contains AMASS .pkl files (searched recursively).
     page_size : int
         Number of items per page.
     shuffle : bool
@@ -32,26 +43,15 @@ class AmassPager:
         page_size: int = 20,
         shuffle: bool = False,
         seed: int = 46,
-        device: Union[str, torch.device] = "cpu",
     ):
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         self.root = os.path.abspath(os.path.expanduser(dataset_root))
         self.page_size = int(page_size)
-        self.device = torch.device(device)
 
-        pattern = os.path.join(self.root, "**", "*.npz")
+        pattern = os.path.join(self.root, "**", "*.pkl")
         files = glob(pattern, recursive=True)
-
-        invalid_path_file = "invalid_amass_files.txt"
-
-        if os.path.exists(invalid_path_file):
-            # read paths to exclude
-            with open(invalid_path_file, "r") as f:
-                invalid_files = {line.strip() for line in f if line.strip()}
-
-            # filter out invalid files
-            files = [f for f in files if f not in invalid_files]
-
-            print(f"exclude {len(invalid_files)} invalid path")
 
         files.sort()  # deterministic order
         if shuffle:
@@ -86,7 +86,7 @@ class AmassPager:
 
     def get_names_by_page(self, page_index: int) -> List[str]:
         paths = self.get_paths_by_page(page_index)
-        # exclude the dataset root and the .npz extension
+        # exclude the dataset root and the .pkl extension
         return [os.path.splitext(os.path.relpath(p, self.root))[0] for p in paths]
 
     def get_by_page(
@@ -96,8 +96,6 @@ class AmassPager:
         keys: Optional[List[str]] = None,
         to_torch: bool = True,
         mmap: bool = True,
-        strict_keys: bool = False,
-        skip_errors: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Load and return a list of dicts (one per file on the page).
@@ -132,13 +130,9 @@ class AmassPager:
                     keys=keys,
                     to_torch=to_torch,
                     mmap=mmap,
-                    strict_keys=strict_keys,
                 )
                 out.append(item)
             except Exception as e:
-                if skip_errors:
-                    # You may log this if desired
-                    continue
                 raise e
         return out
 
@@ -148,8 +142,6 @@ class AmassPager:
         keys: Optional[List[str]] = None,
         to_torch: bool = False,
         mmap: bool = True,
-        strict_keys: bool = False,
-        skip_errors: bool = True,
     ) -> Iterable[List[Dict[str, Any]]]:
         """Iterator over all pages (loaded)."""
         for p in range(self.total_pages):
@@ -158,72 +150,66 @@ class AmassPager:
                 keys=keys,
                 to_torch=to_torch,
                 mmap=mmap,
-                strict_keys=strict_keys,
-                skip_errors=skip_errors,
             )
 
     # --------- helpers ---------
     def load_single(
         self,
         path: str,
-        *,
-        keys: Optional[List[str]] = ["trans", "poses", "betas", "gender"],
-        to_torch: bool = True,
-        mmap: bool = True,
-        strict_keys: bool = True,
     ) -> Dict[str, Any]:
         load_kwargs = {"allow_pickle": False}
 
         if not os.path.isabs(path):
             path = os.path.join(self.root, path)
-        if not path.endswith(".npz"):
-            path = f"{path}.npz"
+        if not path.endswith(".pkl"):
+            path = f"{path}.pkl"
 
-        if mmap:
-            load_kwargs["mmap_mode"] = "r"  # zero-copy views where possible
+        raw_motion_data = joblib.load(path)
 
-        with np.load(path, **load_kwargs) as data:
-            result: Dict[str, Any] = {"__path__": path}
+        for motion_name, motion_data in raw_motion_data.items():
+            # dict_keys(['pose_quat_global', 'pose_quat', 'trans_orig', 'root_trans_offset', 'beta', 'gender', 'pose_aa', 'fps'])
+            # motion_data
 
-            wanted = data.files if keys is None else keys
-            missing = [k for k in (keys or []) if k not in data.files]
-            if strict_keys and missing:
-                raise KeyError(f"Missing keys {missing} in {path}")
+            root_trans = _to_tensor(motion_data["trans_orig"], self.device)
 
-            for k in wanted:
-                if k not in data.files:
-                    # silently skip missing if not strict
-                    continue
-                arr = data[k]
-                if (
-                    to_torch
-                    and isinstance(arr, np.ndarray)
-                    and np.issubdtype(arr.dtype, np.number)
-                ):
-                    arr = torch.from_numpy(arr).to(
-                        self.device, non_blocking=True, dtype=torch.float
-                    )
-                result[k] = arr
+            pose_aa = motion_data["pose_aa"].reshape(-1, 24, 3)
 
-        return result
+            root_aa = _to_tensor(pose_aa[:, 0, :], self.device)
+            body_aa = _to_tensor(pose_aa[:, 1:, :], self.device)
+
+            # most of the time, betas are zeros anyway
+            betas = _to_tensor(motion_data["beta"][:10], self.device)
+
+            betas = betas.unsqueeze(0).expand(root_trans.shape[0], 10)
+
+            # print(type(motion_name))
+            # print(root_trans.shape)
+            # print(root_aa.shape)
+            # print(body_aa.shape)
+
+            # there is juts one motion, so we return in the loop
+            return {
+                "motion_name": motion_name,
+                "gender": motion_data["gender"],
+                "root_trans": root_trans,
+                "root_aa": root_aa,
+                "body_aa": body_aa,
+                "betas": betas,
+            }
+
+        # print(raw_motion_data.keys())
 
 
 # ---------------- example usage ----------------
 if __name__ == "__main__":
     # Your existing root
-    folder = os.path.join(
-        os.path.expanduser("~"),
-        "repos",
-        "humos",
-        "datasets",
-        "amass_data",
-    )
+    folder = os.path.join("/home/hlz/repos/ASE/ase/data/motions")
 
-    pager = AmassPager(
+    pager = PHCPager(
         dataset_root=folder,
     )
 
-    print(f"Found {pager.num_items} .npz files across {pager.total_pages} pages.")
+    print(f"Found {pager.num_items} .pkl files across {pager.total_pages} pages.")
 
     # Get just paths for page 0
     page0_paths = pager.get_names_by_page(0)
@@ -233,9 +219,9 @@ if __name__ == "__main__":
     # 'poses', 'betas', 'trans', 'gender', 'mocap_framerate', etc.
     motion_data = pager.load_single(page0_paths[0])
 
-    print(motion_data)
-
-    for k, data in motion_data.items():
-        print(k)
-        if hasattr(data, "shape"):
-            print(data.shape)
+    for k, v in motion_data.items():
+        print(f"{k}:")
+        if hasattr(v, "shape"):
+            print(v.shape)
+        else:
+            print(v)
