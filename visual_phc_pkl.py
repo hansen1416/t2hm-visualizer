@@ -41,7 +41,8 @@ class AnimPlayer:
 
         # load all the motion data paths
         self.pager = PHCPager(
-            dataset_root=os.path.join("/home/hlz/repos/ASE/ase/data/motions"),
+            # dataset_root=os.path.join("/home/hlz/repos/ASE/ase/data/motions"),
+            dataset_root=os.path.join("//home/hlz/datasets/amass-pkls"),
         )
 
         self._setup_lighting()
