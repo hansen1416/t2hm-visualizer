@@ -15,7 +15,7 @@ from paginator.phc_paginator import PHCPager
 
 class AnimPlayer:
 
-    def __init__(self):
+    def __init__(self, dataset_root):
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -39,10 +39,7 @@ class AnimPlayer:
         self.smpl_type = "smpl"
 
         # load all the motion data paths
-        self.pager = PHCPager(
-            # dataset_root=os.path.join("/home/hlz/repos/ASE/ase/data/motions"),
-            dataset_root=os.path.join("//home/hlz/datasets/amass-pkls"),
-        )
+        self.pager = PHCPager(dataset_root=dataset_root)
 
         self._setup_lighting()
         self._add_ground()
@@ -363,6 +360,10 @@ class AnimPlayer:
 
 if __name__ == "__main__":
 
-    animPlayer = AnimPlayer()
+    # dataset_root = (os.path.join("/home/hlz/repos/ASE/ase/data/motions"),)
+    # dataset_root = os.path.join("//home/hlz/datasets/amass-pkls")
+    dataset_root = os.path.join("/home/hlz/repos/t2hm-visualizer/phc_test")
+
+    animPlayer = AnimPlayer(dataset_root)
 
     animPlayer.run()
