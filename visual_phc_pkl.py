@@ -1,7 +1,6 @@
 import os
 import time
 import threading
-from typing import List, Dict, Any, Iterable, Optional, Union, Tuple
 
 import torch
 import numpy as np
@@ -11,7 +10,7 @@ import open3d.visualization.rendering as rendering
 from third_party.aitviewer_humos.aitviewer.models.smpl import SMPLLayer
 
 from utils.utils import get_checkerboard_plane
-from phc_paginator import PHCPager
+from paginator.phc_paginator import PHCPager
 
 
 class AnimPlayer:

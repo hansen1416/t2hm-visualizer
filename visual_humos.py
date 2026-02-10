@@ -14,7 +14,7 @@ import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 
 from utils.utils import get_checkerboard_plane
-from humos_paginator import HumosPager
+from paginator.humos_paginator import HumosPager
 from third_party.aitviewer_humos.aitviewer.models.smpl import SMPLLayer
 
 from typing import Iterable, Optional

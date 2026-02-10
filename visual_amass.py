@@ -11,7 +11,7 @@ import open3d.visualization.rendering as rendering
 from smplx import SMPLX
 
 from utils.utils import get_checkerboard_plane
-from motion_paginator import AmassPager
+from paginator.motion_paginator import AmassPager
 
 
 class AnimPlayer:
