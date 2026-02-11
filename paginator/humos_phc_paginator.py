@@ -3,25 +3,10 @@ import math
 import random
 from glob import glob
 from typing import List, Dict, Any, Iterable, Optional, Union, Tuple
+import joblib
 
 import numpy as np
 import torch
-
-
-def _gender_to_str(g: str) -> str:
-    g = str(g).strip().lower()
-    return {
-        "1": "male",
-        "male": "male",
-        "m": "male",
-        "+1": "male",
-        "-1": "female",
-        "female": "female",
-        "f": "female",
-        "0": "neutral",
-        "neutral": "neutral",
-        "n": "neutral",
-    }.get(g, "male")
 
 
 def _to_tensor(v: Any, device, to_torch) -> torch.Tensor:
@@ -34,7 +19,7 @@ def _to_tensor(v: Any, device, to_torch) -> torch.Tensor:
     return t.to(device) if to_torch else t
 
 
-class HumosPager:
+class HumosPHCPager:
     """
     Paginate Humos results .pt files with optional (lazy/eager) loading.
 
@@ -64,7 +49,7 @@ class HumosPager:
         self.page_size = int(page_size)
         self.device = torch.device(device)
 
-        self.ext = "pt"
+        self.ext = "pkl"
 
         pattern = os.path.join(self.root, "**", f"*.{self.ext}")
         files = glob(pattern, recursive=True)
@@ -182,11 +167,6 @@ class HumosPager:
     def load_single(
         self,
         path: str,
-        *,
-        gender: str = "male",
-        to_torch: bool = True,
-        strict_keys: bool = False,
-        strict: bool = True,
     ) -> Tuple[Dict[str, Any], str, List]:
 
         if not os.path.isabs(path):
@@ -197,83 +177,46 @@ class HumosPager:
         if not os.path.exists(path):
             raise FileNotFoundError(f"File not found: {path}")
 
-        result = torch.load(path, map_location=self.device)
+        result = joblib.load(path)
 
         if not isinstance(result, dict):
             raise TypeError(
                 f"Expected a dict from torch.load(), got {type(result).__name__} from: {path}"
             )
 
-        # Default key set (the SMPL-H parameters we need for visualization)
-        motion_keys = ["betas", "gender", "root_orient", "pose_body", "trans"]
+        motion_name = list(result.keys())[0]
 
-        gender_str = _gender_to_str(gender)
+        # dict_keys(['gender', 'beta', 'fps', 'trans_orig', 'pose_aa', 'root_trans_offset', 'pose_quat', 'pose_quat_global'])
+        motion_data = result[motion_name]
 
-        if gender_str not in result:
-            raise KeyError(
-                f"Gender '{gender_str}' not found in {path}. Present keys: {list(result.keys())}"
-            )
+        pose_aa = motion_data["pose_aa"]
 
-        beta_dict = result[gender_str]
-        if not isinstance(beta_dict, dict):
-            raise TypeError(
-                f"Expected result['{gender_str}'] to be a dict, got {type(beta_dict).__name__}"
-            )
+        N = pose_aa.shape[0]
 
-        beta_key_list = list(beta_dict.keys())
+        pose_aa = pose_aa.reshape(N, 24, 3)
 
-        stacked: Dict[str, List[torch.Tensor]] = {k: [] for k in motion_keys}
-        offsets: List[torch.Tensor] = []
+        root_orient = pose_aa[:, 0, :]
+        pose_body = pose_aa[:, 1:, :]
 
-        for bk in beta_key_list:
-            item = beta_dict[bk]
+        beta = motion_data["beta"]
+        beta = beta.expand(N, -1)
 
-            if not isinstance(item, dict):
-                raise TypeError(
-                    f"Expected beta entry to be a dict for beta_key={bk}, got {type(item).__name__}"
-                )
-
-            missing = [k for k in motion_keys if k not in item]
-            if missing:
-                msg = (
-                    f"Missing required keys {missing} in {path} / {gender_str} / {bk}. "
-                    f"Present keys: {list(item.keys())}"
-                )
-                if strict or strict_keys:
-                    raise KeyError(msg)
-                else:
-                    print(f"[warn] {msg}")
-
-            for k in motion_keys:
-                if k in item:
-                    stacked[k].append(_to_tensor(item[k], self.device, to_torch))
-
-            offsets.append(
-                _to_tensor(
-                    item.get("offset_height", 0.0), self.device, to_torch
-                ).reshape(())
-            )
-
-        motion_data: Dict[str, Any] = {}
-        for k, lst in stacked.items():
-            if len(lst) == 0:
-                continue
-            motion_data[k] = torch.stack(lst, dim=0)  # [B, T, D]
-
-        offset_height = torch.stack(offsets, dim=0) if len(offsets) > 0 else None
-        text_list = result["text"]
-        return motion_data, text_list, offset_height
+        return (
+            motion_name,
+            motion_data["gender"],
+            beta,
+            motion_data["trans_orig"],
+            root_orient,
+            pose_body,
+        )
 
 
 # ---------------- example usage ----------------
 if __name__ == "__main__":
     # Your existing root
-    folder = os.path.join(
-        os.path.expanduser("~"),
-        "repos/humos/output/",
-    )
+    folder = os.path.join(os.path.expanduser("~"), "datasets/humos_results")
 
-    pager = HumosPager(
+    pager = HumosPHCPager(
         dataset_root=folder,
     )
 
@@ -287,8 +230,13 @@ if __name__ == "__main__":
 
     # Load a page (lazy, memory-mapped), typical AMASS keys include:
     # 'poses', 'betas', 'trans', 'gender', 'mocap_framerate', etc.
-    motion_data, text_list, offset_height = pager.load_single(page0_paths[0])
+    motion_name, gender, beta, transl, root_orient, pose_body = pager.load_single(
+        page0_paths[0]
+    )
 
-    for k, v in motion_data.items():
-        print(k)
-        print(v.shape)
+    print(motion_name)
+    print(gender)
+    print(beta.shape)
+    print(transl.shape)
+    print(root_orient.shape)
+    print(pose_body.shape)
