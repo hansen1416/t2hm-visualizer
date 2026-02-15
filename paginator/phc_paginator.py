@@ -166,16 +166,19 @@ class PHCPager:
 
         raw_motion_data = joblib.load(path)
 
+        # the format of `raw_motion_data` is
+        # dict_keys(['0-ACCAD_Female1General_c3d_A1 - Stand_poses']):
+        # dict_keys(['pose_quat_global', 'pose_quat', 'trans_orig', 'root_trans_offset', 'beta', 'gender', 'pose_aa', 'fps'])
+        # pose_quat_global: (106, 24, 4)
+        # pose_quat: (106, 24, 4)
+        # trans_orig: (106, 3)
+        # root_trans_offset: torch.Size([106, 3])
+        # beta: (16,)
+        # gender: neutral
+        # pose_aa: (106, 72)
+        # fps: 30
+
         for motion_name, motion_data in raw_motion_data.items():
-            # dict_keys(['pose_quat_global', 'pose_quat', 'trans_orig', 'root_trans_offset', 'beta', 'gender', 'pose_aa', 'fps'])
-            # pose_quat_global: (106, 24, 4)
-            # pose_quat: (106, 24, 4)
-            # trans_orig: (106, 3)
-            # root_trans_offset: torch.Size([106, 3])
-            # beta: (16,)
-            # gender: neutral
-            # pose_aa: (106, 72)
-            # fps: 30
 
             root_trans = _to_tensor(motion_data["trans_orig"], self.device)
 

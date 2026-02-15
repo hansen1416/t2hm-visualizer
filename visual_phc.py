@@ -361,8 +361,7 @@ class AnimPlayer:
 if __name__ == "__main__":
 
     # dataset_root = (os.path.join("/home/hlz/repos/ASE/ase/data/motions"),)
-    # dataset_root = os.path.join("//home/hlz/datasets/amass-pkls")
-    dataset_root = os.path.join("/home/hlz/repos/t2hm-visualizer/phc_test")
+    dataset_root = os.path.join("/home/hlz/datasets/amass-pkls")
 
     animPlayer = AnimPlayer(dataset_root)
 
