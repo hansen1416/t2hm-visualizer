@@ -12,6 +12,9 @@ import numpy as np
 import open3d as o3d
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
+import tempfile
+import random
+import shutil
 
 from utils.utils import get_checkerboard_plane
 from paginator.humos_phc_paginator import HumosPHCPager
@@ -72,21 +75,33 @@ class AnimPlayer:
 
         self.smpl_type = "smpl"
 
-        # load the motion data before add ui and after init smpl
-        dataset_folder = os.path.join(
-            os.path.expanduser("~"),
-            "datasets/humos_results",
+        # === HHI project[](https://github.com/hansen1416/hhi) ===
+        # This viewer now loads HUMOS-generated .pkl files (128 variations per motion_id)
+        # from the locally mounted Google Drive folder at /mnt/gdrive_humos_phc_results.
+        # Uses /home/hlz/repos/PHC/cmd/all_humos_part1_existing.txt for motion IDs.
+        # Fast init: pick 10 random motion_ids → randomly select 2 .pkl files per folder
+        # (total 20 motions). Files are copied to a TemporaryDirectory (no persistent local files).
+        # No rclone, no full listing — pure local filesystem operations for maximum speed.
+        # Page selection removed. Shuffle button added.
+        # Ties directly into your AMASS → HUMOS → physical motion conversion goal (AMP + PHC).
+
+        self.mounted_root = Path("/mnt/gdrive_humos_phc_results")
+        self.all_humos_ids_file = Path(
+            "/home/hlz/repos/PHC/cmd/all_humos_part1_existing.txt"
         )
-        # load all the motion data paths
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="hhi_humos_view_")
+        self.local_motion_root = Path(self.temp_dir.name)
+
+        print(f"[HHI / HUMOS] Creating temporary storage at {self.local_motion_root}")
+        self._download_random_motions(num_motions=20)
+
+        # load all the motion data paths (now from the fresh 20-motion temp folder)
         self.pager = HumosPHCPager(
-            dataset_root=dataset_folder,
+            dataset_root=str(self.local_motion_root),
             device=self.device,
         )
 
         self.verts_glob = None
-
-        # --- in AnimPlayer.__init__ (add near other state init, before self._add_ui()) ---
-        self.current_page_idx = 0
 
         self._setup_lighting()
         self._add_ground()
@@ -96,14 +111,78 @@ class AnimPlayer:
         # load smpl model
         self._init_smpl()
 
-        # load first page
-        fisrt_path = self._load_batch(0)
+        # load first batch of 20 motions
+        first_path = self._load_batch()
 
-        # # load first motion
-        self._load_data(fisrt_path)
+        # load first motion
+        self._load_data(first_path)
 
-        # # thread animation testing
+        # thread animation testing
         threading.Thread(target=self.animate_mesh, daemon=True).start()
+
+    def _download_random_motions(self, num_motions=20):
+        """Fast local loading from mounted drive:
+        Read motion IDs from all_humos_part1_existing.txt → pick 10 random IDs
+        → for each folder in /mnt/gdrive_humos_phc_results/ randomly pick 2 .pkl files.
+        Pure pathlib + shutil (no rclone)."""
+        print(f"[HHI] Loading motion IDs from {self.all_humos_ids_file}...")
+
+        if not self.all_humos_ids_file.exists():
+            raise RuntimeError(
+                f"[HHI] all_humos_part1_existing.txt not found at {self.all_humos_ids_file}"
+            )
+
+        with open(self.all_humos_ids_file, "r") as f:
+            motion_ids = [line.strip() for line in f if line.strip()]
+
+        if not motion_ids:
+            raise RuntimeError(
+                "[HHI] No motion IDs found in all_humos_part1_existing.txt"
+            )
+
+        # Pick 10 random motion IDs (folders like "000000")
+        selected_ids = random.sample(motion_ids, min(10, len(motion_ids)))
+        print(
+            f"[HHI] Selected 10 random motion IDs → will copy 2 .pkl files each from mounted drive (total 20)"
+        )
+
+        # Clear temp dir
+        for child in list(self.local_motion_root.iterdir()):
+            if child.is_dir():
+                for f in list(child.rglob("*")):
+                    f.unlink(missing_ok=True)
+                child.rmdir()
+            else:
+                child.unlink(missing_ok=True)
+
+        total_copied = 0
+        for motion_id in selected_ids:
+            source_folder = self.mounted_root / motion_id
+            if not source_folder.exists() or not source_folder.is_dir():
+                print(f"  ⚠️  Folder {motion_id} not found in mounted drive — skipping")
+                continue
+
+            pkl_files = list(source_folder.glob("*.pkl"))
+            if not pkl_files:
+                print(f"  ⚠️  No .pkl files in {motion_id} — skipping")
+                continue
+
+            # Pick 2 random .pkl per motion_id
+            selected_pkl = random.sample(pkl_files, min(2, len(pkl_files)))
+
+            for src_path in selected_pkl:
+                rel_name = src_path.name
+                dest_path = self.local_motion_root / motion_id / rel_name
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+                shutil.copy2(src_path, dest_path)
+                total_copied += 1
+                # print(f"  ✓ {motion_id}/{rel_name}")  # uncomment for verbose
+
+        print(
+            f"[HHI] ✓ Copied {total_copied} HUMOS motions (~223KB each) to temporary storage."
+        )
+        return
 
     @property
     def play_animation(self):
@@ -223,7 +302,7 @@ class AnimPlayer:
 
     def _add_ui(self):
         """
-        Add page selection, motion selection and text description
+        Add motion selection and shuffle button (page selection removed for HHI random-20 workflow)
         """
         em = self.window.theme.font_size
 
@@ -231,22 +310,14 @@ class AnimPlayer:
             0, gui.Margins(0.25 * em, 0.25 * em, 0.25 * em, 0.25 * em)
         )
 
-        # Category Selector
         self.category_combo = gui.Combobox()
-
-        # Index Selector (1–500)
-        self.index_combo = gui.Combobox()
-
-        for i in range(1, self.pager.total_pages + 1):
-            self.index_combo.add_item(str(i))
-
-        self.index_combo.set_on_selection_changed(self._on_page_changed)
-        self._widget_layout.add_child(gui.Label("Select Page"))
-        self._widget_layout.add_child(self.index_combo)
-
         self.category_combo.set_on_selection_changed(self._on_motion_changed)
         self._widget_layout.add_child(gui.Label("Select Motion"))
         self._widget_layout.add_child(self.category_combo)
+
+        self.shuffle_button = gui.Button("Shuffle Motions (20 new)")
+        self.shuffle_button.set_on_clicked(self._on_shuffle_clicked)
+        self._widget_layout.add_child(self.shuffle_button)
 
         self.play_button = gui.Button("Pause")
         self.play_button.enabled = False
@@ -278,16 +349,13 @@ class AnimPlayer:
         # place the label at the bottom left
         self.label_layout.frame = gui.Rect(0, r.height - 80, 700, 80)
 
-    def _load_batch(self, page_index: int):
-        """load motion path for give page"""
-
+    def _load_batch(self):
+        """load the current 20-motion batch (no more paging)"""
         self.play_animation = False
         self.frame_idx = 0
         self.play_button.enabled = False
 
-        self.current_page_idx = page_index
-
-        self.motion_batch = self.pager.get_names_by_page(page_index)
+        self.motion_batch = self.pager.get_names_by_page(0)
 
         # do not forget to update motion selection
         self.category_combo.clear_items()
@@ -381,29 +449,24 @@ class AnimPlayer:
             print(e)
             return
 
-    def _on_page_changed(self, value, _):
-        try:
+    def _on_shuffle_clicked(self):
+        """Shuffle button — copies a brand new random set of 20 HUMOS motions from mounted drive"""
+        print(
+            "[HHI] Shuffling — fetching 20 new random HUMOS motions from mounted drive..."
+        )
+        self._download_random_motions(num_motions=20)
 
-            # motion_path = self._load_batch(int(value) - 1)
-            # self._load_data(motion_path)
-            page_idx = int(value) - 1
-            motion_path = self._load_batch(page_idx)
-            self._load_data(motion_path)
+        # recreate pager so it sees the fresh temp folder contents
+        self.pager = HumosPHCPager(
+            dataset_root=str(self.local_motion_root),
+            device=self.device,
+        )
 
-        except Exception as e:
-            self.selected_index = None
-
-            msg = gui.Dialog("Error")
-            msg_layout = gui.Vert(0, gui.Margins(10, 10, 10, 10))
-            msg_layout.add_child(gui.Label(f"Invalid index selected."))
-            ok_button = gui.Button("OK")
-            ok_button.set_on_clicked(lambda: self.window.close_dialog())
-            msg_layout.add_child(ok_button)
-            msg.add_child(msg_layout)
-            self.window.show_dialog(msg)
-
-            print(e)
-            return
+        motion_path = self._load_batch()
+        self._load_data(motion_path)
+        print(
+            f"[HHI] ✅ Shuffled! New set of {len(self.motion_batch)} HUMOS motions ready."
+        )
 
     def _on_run_button_click(self):
 
