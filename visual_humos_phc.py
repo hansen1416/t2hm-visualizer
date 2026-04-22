@@ -85,10 +85,8 @@ class AnimPlayer:
         # Page selection removed. Shuffle button added.
         # Ties directly into your AMASS → HUMOS → physical motion conversion goal (AMP + PHC).
 
-        self.mounted_root = Path("/mnt/gdrive_humos_phc_results")
-        self.all_humos_ids_file = Path(
-            "/home/hlz/repos/PHC/cmd/all_humos_part1_existing.txt"
-        )
+        self.mounted_root = Path("/media/hlz/斐妮丫/humos_phc_results")
+        self.all_humos_ids_file = Path("/home/hlz/repos/PHC/cmd/all_humos_files.txt")
         self.temp_dir = tempfile.TemporaryDirectory(prefix="hhi_humos_view_")
         self.local_motion_root = Path(self.temp_dir.name)
 
@@ -133,7 +131,9 @@ class AnimPlayer:
             )
 
         with open(self.all_humos_ids_file, "r") as f:
-            motion_ids = [line.strip() for line in f if line.strip()]
+            motion_ids = [
+                os.path.splitext(line.strip())[0] for line in f if line.strip()
+            ]
 
         if not motion_ids:
             raise RuntimeError(
