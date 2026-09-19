@@ -75,9 +75,8 @@ class AnimPlayer:
         # load the motion data before add ui and after init smpl
         dataset_folder = os.path.join(
             os.path.expanduser("~"),
-            "repos",
-            "humos",
-            "output",
+            "datasets",
+            "humos_output",
         )
         # load all the motion data paths
         self.pager = HumosPager(
@@ -398,7 +397,7 @@ class AnimPlayer:
                 oh = float(oh.reshape(-1)[0])
 
             # shift all frames up by offset height
-            self.verts_glob[mesh_idx][..., self.up_axis_idx] += oh
+            # self.verts_glob[mesh_idx][..., self.up_axis_idx] += oh
 
             self.body_meshes[mesh_idx].vertices = o3d.utility.Vector3dVector(
                 self.verts_glob[mesh_idx][self.frame_idx].copy()
